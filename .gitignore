@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+
+# Virtual environments
+env/
+env1/
+venv/
+.venv/
+
+# Environment variables
+.env
+.env.*
+
+# Django
+trainer_service/trainer_certificates/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
