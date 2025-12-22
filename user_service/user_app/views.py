@@ -164,3 +164,5 @@ class RemoveTrainerView(APIView):
             {"detail": "Trainer removed"},
             status=status.HTTP_200_OK,
         )
+
+

@@ -18,8 +18,10 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+
     "rest_framework",
     "corsheaders",
+    
     "user_app",
 ]
 
@@ -111,3 +113,4 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL")
 USER_SERVICE_URL = os.getenv("USER_SERVICE_URL")
 TRAINER_SERVICE_URL = os.getenv("TRAINER_SERVICE_URL")
+AI_SERVICE_BASE_URL= os.getenv("AI_SERVICE_BASE_URL")

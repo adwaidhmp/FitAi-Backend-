@@ -100,68 +100,45 @@ class UserProfile(models.Model):
         return f"Profile {self.user_id}"
 
 
-# ---------- Daily / periodic metrics (used for tracking & AI) ----------
-class DailyMetrics(models.Model):
+class DietPlan(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user_id = models.UUIDField(db_index=True, help_text="UUID from auth_service User")
-    date = models.DateField(db_index=True)
+    user_id = models.UUIDField()
+    
+    daily_calories = models.IntegerField()
+    macros = models.JSONField()
+    meals = models.JSONField()
 
-    calories_intake = models.IntegerField(
-        null=True, blank=True, validators=[MinValueValidator(0)]
-    )
-    protein_g = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-    )
-    carbs_g = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-    )
-    fats_g = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
+    version = models.CharField(max_length=20, default="diet_v1")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user_id"]),
+        ]
+
+class FoodLog(models.Model):
+    SOURCE_CHOICES = (
+        ("plan", "Followed Plan"),
+        ("custom", "Custom Meal"),
     )
 
-    calories_burned = models.IntegerField(
-        null=True, blank=True, validators=[MinValueValidator(0)]
-    )
-    steps = models.IntegerField(
-        null=True, blank=True, validators=[MinValueValidator(0)]
-    )
-    sleep_hours = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0), MaxValueValidator(24)],
-    )
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField()
 
-    photo_urls = models.JSONField(default=list, blank=True)
-    notes = models.TextField(blank=True)
+    date = models.DateField()
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES)
+
+    items = models.JSONField()
+    calories = models.IntegerField()
+    protein = models.IntegerField()
+    carbs = models.IntegerField()
+    fat = models.IntegerField()
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = "daily_metrics"
-        constraints = [
-            models.UniqueConstraint(fields=["user_id", "date"], name="unique_user_date")
-        ]
-        indexes = [
-            models.Index(fields=["user_id", "date"]),
-            models.Index(fields=["date"]),
-        ]
+        unique_together = ("user_id", "date")
 
-    def __str__(self):
-        return f"{self.user_id} - {self.date}"
 
 
 class TrainerBooking(models.Model):

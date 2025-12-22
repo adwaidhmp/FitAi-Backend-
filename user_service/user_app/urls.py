@@ -18,4 +18,6 @@ urlpatterns = [
     path("training/pending/", PendingClientsTrainer.as_view()),
     path("training/booking/<uuid:booking_id>/", DecideBookingView.as_view()),
     path("training/bookings/approved/", ApprovedUsersForTrainerView.as_view()),
+
+    #service url for diet ai
 ]
