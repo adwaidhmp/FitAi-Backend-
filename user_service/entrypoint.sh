@@ -3,7 +3,6 @@ set -e
 
 echo "Container starting with role: ${SERVICE_ROLE:-undefined}"
 
-# helper to wait for a TCP host:port
 wait_for() {
   host="$1"
   port="$2"
@@ -16,35 +15,30 @@ wait_for() {
   echo "${name} is ready!"
 }
 
-# --------------------------
-# Wait for Database (only if DB_HOST provided)
-# --------------------------
+# Wait for DB if configured
 if [ -n "${DB_HOST:-}" ]; then
   DB_PORT="${DB_PORT:-5432}"
   wait_for "$DB_HOST" "$DB_PORT" "Database"
 fi
 
-# --------------------------
-# Wait for RabbitMQ (only if RABBIT_HOST provided)
-# --------------------------
-if [ -n "${RABBIT_HOST:-}" ]; then
-  RABBIT_PORT="${RABBIT_PORT:-5672}"
-  wait_for "$RABBIT_HOST" "$RABBIT_PORT" "RabbitMQ"
-fi
-
-# --------------------------
-# Run migrations (safe for SQLite too)
-# --------------------------
 echo "Running migrations..."
 python manage.py migrate --noinput || echo "Migration failed but continuing"
 
-# --------------------------
-# Start correct process
-# --------------------------
-if [ "${SERVICE_ROLE:-web}" = "consumer" ]; then
-  echo "Starting RabbitMQ consumer..."
-  python manage.py run_rabbit_consumer
-else
-  echo "Starting Django web server..."
-  python manage.py runserver 0.0.0.0:8000
-fi
+case "${SERVICE_ROLE:-web}" in
+  web)
+    echo "Starting Django web server..."
+    python manage.py runserver 0.0.0.0:8000
+    ;;
+  user_consumer)
+    echo "Starting USER diet RabbitMQ consumer..."
+    python manage.py diet_worker
+    ;;
+  trainer_consumer)
+    echo "Starting TRAINER RabbitMQ consumer..."
+    python manage.py run_rabbit_trainer_consumer
+    ;;
+  *)
+    echo "❌ Unknown SERVICE_ROLE: ${SERVICE_ROLE}"
+    exit 1
+    ;;
+esac

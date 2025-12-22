@@ -107,7 +107,7 @@ class DietPlan(models.Model):
     daily_calories = models.IntegerField()
     macros = models.JSONField()
     meals = models.JSONField()
-
+    
     version = models.CharField(max_length=20, default="diet_v1")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -116,29 +116,45 @@ class DietPlan(models.Model):
             models.Index(fields=["user_id"]),
         ]
 
-class FoodLog(models.Model):
+
+
+class MealLog(models.Model):
+    MEAL_CHOICES = (
+        ("breakfast", "Breakfast"),
+        ("lunch", "Lunch"),
+        ("dinner", "Dinner"),
+    )
+
     SOURCE_CHOICES = (
-        ("plan", "Followed Plan"),
-        ("custom", "Custom Meal"),
+        ("plan", "AI Plan"),
+        ("custom", "Custom"),
+        ("skipped", "Skipped"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField()
-
     date = models.DateField()
+
+    meal_type = models.CharField(max_length=10, choices=MEAL_CHOICES)
     source = models.CharField(max_length=10, choices=SOURCE_CHOICES)
 
-    items = models.JSONField()
-    calories = models.IntegerField()
-    protein = models.IntegerField()
-    carbs = models.IntegerField()
-    fat = models.IntegerField()
-
-    created_at = models.DateTimeField(auto_now_add=True)
+    items = models.JSONField(blank=True, null=True)
+    calories = models.IntegerField(default=0)
+    protein = models.IntegerField(default=0)
+    carbs = models.IntegerField(default=0)
+    fat = models.IntegerField(default=0)
 
     class Meta:
-        unique_together = ("user_id", "date")
+        unique_together = ("user_id", "date", "meal_type")
+        indexes = [
+            models.Index(fields=["user_id", "date"]),
+        ]
 
+
+class WeightLog(models.Model):
+    user_id = models.UUIDField()
+    weight_kg = models.FloatField()
+    logged_at = models.DateField()
 
 
 class TrainerBooking(models.Model):
