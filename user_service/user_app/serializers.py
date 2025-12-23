@@ -1,22 +1,20 @@
-# user_service/profiles/serializers.py
 from rest_framework import serializers
-
 from .models import UserProfile
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
-
     REQUIRED_FIELDS = [
         "dob",
         "gender",
         "height_cm",
         "weight_kg",
+        "target_weight_kg",
         "goal",
         "activity_level",
         "exercise_experience",
     ]
 
-    # Show the linked auth user id, never allow clients to write it
+    # Expose auth user id, never writable
     user_id = serializers.UUIDField(read_only=True)
 
     class Meta:
@@ -28,6 +26,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "gender",
             "height_cm",
             "weight_kg",
+            "target_weight_kg",
             "goal",
             "body_type",
             "activity_level",
@@ -56,16 +55,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """
-        Enforce required fields (works for create and partial update).
-        Uses existing instance values for missing fields on update.
+        Enforce required fields for both create and partial update.
+        Uses instance values when fields are not present in attrs.
         """
-        missing = []
         instance = getattr(self, "instance", None)
+        missing = []
 
         for field in self.REQUIRED_FIELDS:
-            value = (
-                attrs.get(field) if field in attrs else getattr(instance, field, None)
-            )
+            if field in attrs:
+                value = attrs.get(field)
+            elif instance is not None:
+                value = getattr(instance, field, None)
+            else:
+                value = None
+
             if value in (None, "", []):
                 missing.append(field)
 
@@ -77,28 +80,53 @@ class UserProfileSerializer(serializers.ModelSerializer):
                 }
             )
 
+        # ---- semantic validation ----
+        weight = (
+            attrs.get("weight_kg")
+            if "weight_kg" in attrs
+            else getattr(instance, "weight_kg", None)
+        )
+
+        target = (
+            attrs.get("target_weight_kg")
+            if "target_weight_kg" in attrs
+            else getattr(instance, "target_weight_kg", None)
+        )
+
+        if target is not None:
+            if target <= 0:
+                raise serializers.ValidationError(
+                    {"target_weight_kg": "Target weight must be greater than zero."}
+                )
+
+            if weight is not None and abs(weight - target) > 100:
+                raise serializers.ValidationError(
+                    {
+                        "target_weight_kg": (
+                            "Target weight difference from current weight is unrealistic."
+                        )
+                    }
+                )
+
         return attrs
 
     def _set_user_and_completion(self, instance):
         """
-        Attach user_id (from verified token) and compute completion status.
+        Attach authenticated user_id and compute profile completion.
         """
         request = self.context.get("request")
-        if (
-            not request
-            or not getattr(request, "user", None)
-            or not getattr(request.user, "id", None)
-        ):
+        if not request or not getattr(request.user, "id", None):
             raise serializers.ValidationError("User must be authenticated.")
 
-        # request.user.id comes from your SimpleJWTAuth and should be a UUID string or uuid.UUID
         instance.user_id = request.user.id
 
-        # auto calculate profile completion
-        instance.profile_completed = all(
-            getattr(instance, field) not in (None, "", [])
-            for field in self.REQUIRED_FIELDS
-        )
+        # Compute completion only if not already completed
+        if not instance.profile_completed:
+            instance.profile_completed = all(
+                getattr(instance, field) not in (None, "", [])
+                for field in self.REQUIRED_FIELDS
+            )
+
         return instance
 
     def create(self, validated_data):
@@ -108,7 +136,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return instance
 
     def update(self, instance, validated_data):
-        # ignore any client-provided user_id
+        # Ignore any client-provided user_id
         validated_data.pop("user_id", None)
 
         for attr, value in validated_data.items():

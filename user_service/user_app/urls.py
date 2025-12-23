@@ -6,7 +6,7 @@ from .user_trainer_view import (ApprovedTrainerListView,
 from .views import (BookTrainerView, MyTrainersView, ProfileChoicesView,
                     RemoveTrainerView, UserProfileView)
 from .user_diet_ai_view import (GenerateDietPlanView,FollowMealFromPlanView,LogCustomMealWithAIView,
-                                SkipMealView,UpdateWeightView)
+                                SkipMealView,UpdateWeightView,CurrentDietPlanView)
 
 from .diet_analytics_view import (DailyCaloriesView,
                                  MonthlyCaloriesView,WeeklyProgressView,MonthlyWeightView,MonthlyCauseAnalysisView)
@@ -26,6 +26,7 @@ urlpatterns = [
 
     #urls for ai diet plan follow
     path("diet/generate/", GenerateDietPlanView.as_view()),
+    path("diet-plan/", CurrentDietPlanView.as_view()),
     path("diet/follow-meal/", FollowMealFromPlanView.as_view()),
     path("diet/log-custom-meal/", LogCustomMealWithAIView.as_view()),
     path("diet/skip-meal/", SkipMealView.as_view()),

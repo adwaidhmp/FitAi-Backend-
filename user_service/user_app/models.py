@@ -63,7 +63,13 @@ class UserProfile(models.Model):
         blank=True,
         validators=[MinValueValidator(2), MaxValueValidator(500)],
     )
-
+    target_weight_kg = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(2), MaxValueValidator(500)],
+    )
     goal = models.CharField(max_length=32, choices=GOAL_CHOICES, blank=True)
     body_type = models.CharField(max_length=32, choices=BODY_TYPE_CHOICES, blank=True)
     activity_level = models.CharField(
@@ -103,7 +109,7 @@ class UserProfile(models.Model):
 class DietPlan(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField()
-    
+    week_start = models.DateField()
     daily_calories = models.IntegerField()
     macros = models.JSONField()
     meals = models.JSONField()
@@ -191,3 +197,4 @@ class TrainerBooking(models.Model):
 
     def __str__(self):
         return f"{self.user_id} → {self.trainer_user_id} ({self.status})"
+

@@ -5,13 +5,18 @@ from rest_framework import permissions
 from .models import DietPlan, MealLog
 from .models import UserProfile, DietPlan,WeightLog
 from .helper.ai_client import generate_diet_plan,estimate_nutrition
-from datetime import date
+from datetime import date, timedelta
 from .helper.ai_payload import build_payload_from_profile
 from .events.publisher import publish_event
 from django.conf import settings
 from rest_framework import permissions, status
 from user_app.helper.ai_client import AIServiceError
+from django.utils.timezone import now
 
+
+def get_week_start():
+    today = now().date()
+    return today - timedelta(days=today.weekday())
 
 
 class GenerateDietPlanView(APIView):
@@ -28,6 +33,26 @@ class GenerateDietPlanView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        week_start = get_week_start()
+
+        # 1️⃣ Check existing plan
+        existing_plan = DietPlan.objects.filter(
+            user_id=request.user.id,
+            week_start=week_start,
+        ).first()
+
+        if existing_plan:
+            return Response(
+                {
+                    "daily_calories": existing_plan.daily_calories,
+                    "macros": existing_plan.macros,
+                    "meals": existing_plan.meals,
+                    "version": existing_plan.version,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # 2️⃣ Generate only if missing
         payload = build_payload_from_profile(profile)
 
         try:
@@ -40,13 +65,43 @@ class GenerateDietPlanView(APIView):
 
         DietPlan.objects.create(
             user_id=request.user.id,
+            week_start=week_start,
             daily_calories=ai_response["daily_calories"],
             macros=ai_response["macros"],
             meals=ai_response["meals"],
             version=ai_response["version"],
         )
 
-        return Response(ai_response, status=status.HTTP_200_OK)
+        return Response(ai_response, status=status.HTTP_201_CREATED)
+    
+
+class CurrentDietPlanView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        week_start = get_week_start()
+
+        plan = DietPlan.objects.filter(
+            user_id=request.user.id,
+            week_start=week_start,
+        ).first()
+
+        if not plan:
+            return Response(
+                {"detail": "No active diet plan"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            {
+                "daily_calories": plan.daily_calories,
+                "macros": plan.macros,
+                "meals": plan.meals,
+                "version": plan.version,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 
 class FollowMealFromPlanView(APIView):

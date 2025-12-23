@@ -10,6 +10,7 @@ def build_payload_from_profile(profile):
         "gender": profile.gender,
         "height_cm": float(profile.height_cm),
         "weight_kg": float(profile.weight_kg),
+        "target_weight_kg": float(profile.target_weight_kg),
         "goal": profile.goal,
         "activity_level": profile.activity_level,
         "diet_constraints": profile.diet_constraints or [],

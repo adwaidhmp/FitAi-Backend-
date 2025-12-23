@@ -27,13 +27,14 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    depends_on:
+      - redis
+      - rabbitmq
     command: >
       sh -c "
       python manage.py migrate --noinput &&
       python manage.py runserver 0.0.0.0:8000
       "
-    depends_on:
-      - redis
 
   # -------- Auth Worker ----------
   auth-worker:
@@ -45,6 +46,7 @@ services:
     command: celery -A auth_service worker -l info
     depends_on:
       - redis
+      - rabbitmq
 
   # -------- User Service (WEB) ----------
   user-service:
@@ -60,7 +62,7 @@ services:
     depends_on:
       - rabbitmq
 
-  # -------- User Diet Consumer ----------
+  # -------- User Consumer ----------
   user-consumer:
     build: ./user_service
     volumes:
@@ -71,7 +73,6 @@ services:
       SERVICE_ROLE: user_consumer
     depends_on:
       - rabbitmq
-      - user-service
 
   # -------- Trainer Service (WEB) ----------
   trainer-service:
@@ -98,7 +99,6 @@ services:
       SERVICE_ROLE: trainer_consumer
     depends_on:
       - rabbitmq
-      - trainer-service
 
   # -------- AI Service ----------
   ai-service:
@@ -123,15 +123,15 @@ services:
       - "8003:8000"
     env_file:
       - .env
+    depends_on:
+      - auth-service
+      - user-service
+      - trainer-service
     command: >
       sh -c "
       python manage.py migrate --noinput &&
       python manage.py runserver 0.0.0.0:8000
       "
-    depends_on:
-      - auth-service
-      - user-service
-      - trainer-service
 
 volumes:
   redis_data:

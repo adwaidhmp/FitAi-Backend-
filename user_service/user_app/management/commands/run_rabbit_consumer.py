@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 RABBIT_URL = os.getenv("RABBIT_URL", "amqp://guest:guest@rabbitmq:5672/")
 EXCHANGE = os.getenv("RABBIT_EXCHANGE", "user_events")
 ROUTING_KEY = os.getenv("RABBIT_ROUTING_KEY", "user.created")
-QUEUE = os.getenv("RABBIT_QUEUE", "user.created")
+QUEUE = os.getenv("RABBIT_QUEUE", "user_service.user_created")
 PREFETCH = int(os.getenv("PREFETCH_COUNT", "1"))
 
 # Connection tuning (optional)

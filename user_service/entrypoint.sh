@@ -30,13 +30,17 @@ case "${SERVICE_ROLE:-web}" in
     python manage.py runserver 0.0.0.0:8000
     ;;
   user_consumer)
-    echo "Starting USER diet RabbitMQ consumer..."
-    python manage.py diet_worker
-    ;;
+  echo "Waiting for RabbitMQ..."
+  wait_for "rabbitmq" "5672" "RabbitMQ"
+  echo "Starting USER profile RabbitMQ consumer..."
+  python manage.py run_rabbit_consumer
+  ;;
   trainer_consumer)
-    echo "Starting TRAINER RabbitMQ consumer..."
-    python manage.py run_rabbit_trainer_consumer
-    ;;
+  echo "Waiting for RabbitMQ..."
+  wait_for "rabbitmq" "5672" "RabbitMQ"
+  echo "Starting TRAINER RabbitMQ consumer..."
+  python manage.py run_rabbit_trainer_consumer
+  ;;
   *)
     echo "❌ Unknown SERVICE_ROLE: ${SERVICE_ROLE}"
     exit 1

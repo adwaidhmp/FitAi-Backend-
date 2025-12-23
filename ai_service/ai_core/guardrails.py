@@ -8,6 +8,7 @@ def validate_profile_for_diet(profile: dict, allow_medical: bool = False):
         "gender",
         "height_cm",
         "weight_kg",
+        "target_weight_kg",
         "goal",
         "activity_level",
     ]
