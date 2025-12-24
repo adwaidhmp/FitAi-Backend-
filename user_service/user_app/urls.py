@@ -6,10 +6,9 @@ from .user_trainer_view import (ApprovedTrainerListView,
 from .views import (BookTrainerView, MyTrainersView, ProfileChoicesView,
                     RemoveTrainerView, UserProfileView)
 from .user_diet_ai_view import (GenerateDietPlanView,FollowMealFromPlanView,LogCustomMealWithAIView,
-                                SkipMealView,UpdateWeightView,CurrentDietPlanView)
+                                SkipMealView,UpdateWeightView,CurrentDietPlanView,LogExtraMealView)
 
-from .diet_analytics_view import (DailyCaloriesView,
-                                 MonthlyCaloriesView,WeeklyProgressView,MonthlyWeightView,MonthlyCauseAnalysisView)
+from .diet_analytics_view import (DailyDietAnalyticsView,WeeklyDietAnalyticsView,MonthlyDietAnalyticsView)
 
 urlpatterns = [
     path("profile/", UserProfileView.as_view(), name="user-profile"),
@@ -30,12 +29,24 @@ urlpatterns = [
     path("diet/follow-meal/", FollowMealFromPlanView.as_view()),
     path("diet/log-custom-meal/", LogCustomMealWithAIView.as_view()),
     path("diet/skip-meal/", SkipMealView.as_view()),
+    path("diet/extra-meal/",LogExtraMealView.as_view()),
     path("diet/update-weight/", UpdateWeightView.as_view()),
 
     #diet graphs and analysis urls will be here
-    path("diet/daily-calories/", DailyCaloriesView.as_view()),
-    path("diet/weekly-progress/", WeeklyProgressView.as_view()),
-    path("diet/monthly-calories/", MonthlyCaloriesView.as_view()),
-    path("diet/monthly-weight/", MonthlyWeightView.as_view()),
-    path("diet/monthly-cause-analysis/", MonthlyCauseAnalysisView.as_view()),
+    path(
+        "diet/analytics/daily/",
+        DailyDietAnalyticsView.as_view(),
+        name="diet-analytics-daily",
+    ),
+    path(
+        "diet/analytics/weekly/",
+        WeeklyDietAnalyticsView.as_view(),
+        name="diet-analytics-weekly",
+    ),
+    path(
+        "diet/analytics/monthly/",
+        MonthlyDietAnalyticsView.as_view(),
+        name="diet-analytics-monthly",
+    ),
 ]
+

@@ -1,182 +1,83 @@
 from datetime import date
-from calendar import monthrange
-from django.db.models import Sum
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import permissions
-from datetime import date, timedelta
-from .models import MealLog, DietPlan, WeightLog
+from rest_framework import permissions, status
+
+from .helper.diet_analytics_helper import (
+    get_daily_analytics,
+    get_weekly_analytics,
+    get_monthly_analytics,
+)
 
 
-# 1️⃣ DAILY CALORIE GRAPH API
-class DailyCaloriesView(APIView):
+class DailyDietAnalyticsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        today = date.today()
+        date_str = request.query_params.get("date")
 
-        meals = MealLog.objects.filter(
+        if date_str:
+            try:
+                target_date = date.fromisoformat(date_str)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid date format (YYYY-MM-DD)"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            target_date = date.today()
+
+        analytics = get_daily_analytics(
             user_id=request.user.id,
-            date=today,
+            target_date=target_date,
         )
 
-        total = meals.aggregate(
-            calories=Sum("calories")
-        )["calories"] or 0
+        return Response(analytics, status=status.HTTP_200_OK)
 
-        return Response({
-            "date": today,
-            "calories": total,
-        })
-    
-# 2️⃣ WEEKLY PROGRESS API
-class WeeklyProgressView(APIView):
+
+class WeeklyDietAnalyticsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        today = date.today()
-        start = today - timedelta(days=6)
-
-        meals = MealLog.objects.filter(
-            user_id=request.user.id,
-            date__range=[start, today],
-        )
-
-        # if not meals.exists():
-        #     return Response(
-        #         {"detail": "No meals logged this week"},
-        #         status=404,
-        #     )
-
-        plan = DietPlan.objects.filter(
+        analytics = get_weekly_analytics(
             user_id=request.user.id
-        ).order_by("-created_at").first()
-
-        weekly_target = plan.daily_calories * 7 if plan else None
-
-        daily_stats = {}
-
-        for m in meals:
-            day = m.date.isoformat()
-            if day not in daily_stats:
-                daily_stats[day] = {
-                    "calories": 0,
-                    "followed": 0,
-                }
-
-            daily_stats[day]["calories"] += m.calories
-            if m.source == "plan":
-                daily_stats[day]["followed"] += 1
-
-        return Response({
-            "range": {
-                "from": start,
-                "to": today,
-            },
-            "weekly_target_calories": weekly_target,
-            "days": daily_stats,
-        })
-    
-# 2️⃣ MONTHLY CALORIE AGGREGATION API
-class MonthlyCaloriesView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        today = date.today()
-        year = int(request.query_params.get("year", today.year))
-        month = int(request.query_params.get("month", today.month))
-
-        start = date(year, month, 1)
-        end = date(year, month, monthrange(year, month)[1])
-
-        meals = MealLog.objects.filter(
-            user_id=request.user.id,
-            date__range=[start, end],
         )
 
-        daily = {}
-        for m in meals:
-            key = m.date.isoformat()
-            daily[key] = daily.get(key, 0) + m.calories
+        if not analytics:
+            return Response(
+                {"detail": "Not enough data for weekly analytics"},
+                status=status.HTTP_200_OK,
+            )
 
-        plan = DietPlan.objects.filter(
-            user_id=request.user.id,
-            created_at__date__lte=end
-        ).order_by("-created_at").first()
-
-        monthly_target = plan.daily_calories * len(daily) if plan else None
-        monthly_actual = sum(daily.values())
-
-        return Response({
-            "month": f"{year}-{month}",
-            "daily_calories": daily,
-            "monthly_target": monthly_target,
-            "monthly_actual": monthly_actual,
-        })
+        return Response(analytics, status=status.HTTP_200_OK)
 
 
-# 3️⃣ MONTHLY WEIGHT GRAPH API
-class MonthlyWeightView(APIView):
+class MonthlyDietAnalyticsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        today = date.today()
-        year = int(request.query_params.get("year", today.year))
-        month = int(request.query_params.get("month", today.month))
+        year = request.query_params.get("year")
+        month = request.query_params.get("month")
 
-        start = date(year, month, 1)
-        end = date(year, month, monthrange(year, month)[1])
+        if not year or not month:
+            return Response(
+                {"detail": "year and month are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        weights = WeightLog.objects.filter(
+        try:
+            year = int(year)
+            month = int(month)
+        except ValueError:
+            return Response(
+                {"detail": "year and month must be integers"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        analytics = get_monthly_analytics(
             user_id=request.user.id,
-            logged_at__range=[start, end],
-        ).order_by("logged_at")
-
-        data = [
-            {
-                "date": w.logged_at,
-                "weight": w.weight_kg,
-            }
-            for w in weights
-        ]
-
-        return Response({
-            "month": f"{year}-{month}",
-            "weights": data,
-        })
-
-
-# 4️⃣ MONTHLY CAUSE ANALYSIS (CUSTOM MEALS)
-class MonthlyCauseAnalysisView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        today = date.today()
-        year = int(request.query_params.get("year", today.year))
-        month = int(request.query_params.get("month", today.month))
-
-        start = date(year, month, 1)
-        end = date(year, month, monthrange(year, month)[1])
-
-        custom_meals = MealLog.objects.filter(
-            user_id=request.user.id,
-            source="custom",
-            date__range=[start, end],
+            year=year,
+            month=month,
         )
 
-        daily_custom = {}
-        for m in custom_meals:
-            key = m.date.isoformat()
-            daily_custom[key] = daily_custom.get(key, 0) + m.calories
-
-        top_days = sorted(
-            daily_custom.items(),
-            key=lambda x: x[1],
-            reverse=True,
-        )[:5]
-
-        return Response({
-            "month": f"{year}-{month}",
-            "total_custom_calories": sum(daily_custom.values()),
-            "top_custom_days": top_days,
-        })
+        return Response(analytics, status=status.HTTP_200_OK)
