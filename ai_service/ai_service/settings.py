@@ -15,6 +15,7 @@ from datetime import timedelta
 from decouple import config
 import os
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -151,3 +152,4 @@ USER_SERVICE_URL = os.getenv("USER_SERVICE_URL")
 TRAINER_SERVICE_URL = os.getenv("TRAINER_SERVICE_URL")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+

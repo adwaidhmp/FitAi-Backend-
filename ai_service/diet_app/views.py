@@ -14,24 +14,31 @@ from ai_core.calculations import (
 from ai_core.guardrails import validate_profile_for_diet, GuardrailError
 from .prompts import SYSTEM_PROMPT, build_prompt
 from ai_core.ai_nutrition import estimate_nutrition
+import logging
+logger = logging.getLogger(__name__)
+
 
 class GenerateDietView(APIView):
     def post(self, request):
         profile = request.data
 
         try:
+            # --- DOB → AGE ---
             if isinstance(profile["dob"], str):
                 profile["dob"] = date.fromisoformat(profile["dob"])
 
             profile["age"] = calculate_age(profile["dob"])
 
+            # --- MODE ---
             diet_mode = profile.get("diet_mode", "normal")
 
+            # --- VALIDATION ---
             validate_profile_for_diet(
                 profile,
                 allow_medical=(diet_mode == "medical_safe"),
             )
 
+            # --- BMR + TDEE ---
             bmr = calculate_bmr(
                 profile["weight_kg"],
                 profile["height_cm"],
@@ -41,22 +48,30 @@ class GenerateDietView(APIView):
 
             tdee = bmr * activity_multiplier(profile["activity_level"])
 
+            # --- CALORIES ---
             if diet_mode == "medical_safe":
-                calories = round(tdee * 0.9)  # safe deficit
+                calories = round(tdee * 0.9)
             else:
-                calories = round(target_calories(tdee, profile["goal"]))
+                calories = target_calories(
+                    tdee=tdee,
+                    current_weight=profile["weight_kg"],
+                    target_weight=profile["target_weight_kg"],
+                    goal=profile["goal"],
+                )
 
+            # --- MACROS ---
             macros = calculate_macros(
                 calories,
                 profile["weight_kg"],
                 profile["goal"],
             )
 
+            # --- AI ---
             prompt = build_prompt(profile, calories, macros)
-
             ai_text = ask_ai(SYSTEM_PROMPT, prompt)
             meals = json.loads(ai_text)
 
+            # --- RESPONSE ---
             return Response(
                 {
                     "version": "medical_safe_v1"
@@ -77,15 +92,36 @@ class GenerateDietView(APIView):
         except GuardrailError as e:
             return Response({"error": str(e)}, status=400)
 
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"error": str(e)},
+                status=500,
+            )
+
 
 
 class NutritionEstimateView(APIView):
-
     def post(self, request):
+        logger.info("NutritionEstimateView called")
+
         food_text = request.data.get("food_text")
 
-        if not food_text:
-            return Response({"detail": "food_text required"}, status=400)
+        if not food_text or not food_text.strip():
+            logger.info("NutritionEstimateView called")
+            return Response(
+                {"detail": "food_text required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        result = estimate_nutrition(food_text)
-        return Response(result)
+        try:
+            result = estimate_nutrition(food_text)
+            logger.info("NutritionEstimateView returning response")
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(result, status=status.HTTP_200_OK)

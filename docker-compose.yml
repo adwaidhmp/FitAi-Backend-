@@ -74,6 +74,18 @@ services:
     depends_on:
       - rabbitmq
 
+  # -------- User Celery Worker ----------
+  user-worker:
+    build: ./user_service
+    volumes:
+      - ./user_service:/app
+    env_file:
+      - .env
+    environment:
+      SERVICE_ROLE: celery_worker
+    depends_on:
+      - rabbitmq
+
   # -------- Trainer Service (WEB) ----------
   trainer-service:
     build: ./trainer_service

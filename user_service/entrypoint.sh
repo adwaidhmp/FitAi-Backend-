@@ -41,6 +41,12 @@ case "${SERVICE_ROLE:-web}" in
   echo "Starting TRAINER RabbitMQ consumer..."
   python manage.py run_rabbit_trainer_consumer
   ;;
+  celery_worker)
+  echo "Waiting for RabbitMQ..."
+  wait_for "rabbitmq" "5672" "RabbitMQ"
+  echo "Starting Celery worker..."
+  celery -A user_service worker -l info
+  ;;
   *)
     echo "❌ Unknown SERVICE_ROLE: ${SERVICE_ROLE}"
     exit 1

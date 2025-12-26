@@ -1,28 +1,72 @@
+import logging
 import json
 from openai import OpenAI
+from django.conf import settings
 
-client = OpenAI()
+logger = logging.getLogger(__name__)
+
+
+
+def get_client():
+    if not settings.OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+    return OpenAI(api_key=settings.OPENAI_API_KEY)
+
 
 SYSTEM_PROMPT = """
 You are a nutrition estimation engine.
-Estimate calories, protein, carbs, and fat.
-Assume Indian portion sizes if not specified.
-Return ONLY valid JSON.
-Do not explain anything.
+
+Return ONLY valid JSON in EXACTLY this format:
+
+{
+  "items": ["food item 1", "food item 2"],
+  "total": {
+    "calories": number,
+    "protein": number,
+    "carbs": number,
+    "fat": number
+  }
+}
+
+Rules:
+- Assume Indian portion sizes if not specified
+- Do NOT explain anything
+- Do NOT include markdown
+- Do NOT include text outside JSON
 """
 
-def estimate_nutrition(food_text: str):
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Estimate nutrition for: {food_text}"
-            },
-        ],
-        temperature=0,
-    )
 
-    content = response.choices[0].message.content
-    return json.loads(content)
+def estimate_nutrition(food_text: str) -> dict:
+    logger.info("Estimating nutrition", extra={"food_text": food_text})
+
+    try:
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": food_text},
+            ],
+            temperature=0,
+        )
+
+        content = response.choices[0].message.content
+        data = json.loads(content)
+
+        logger.info("Nutrition estimation success")
+
+        return data
+
+    except Exception:
+        logger.exception("Nutrition estimation FAILED")
+        return {
+            "items": [food_text],
+            "total": {
+                "calories": 0,
+                "protein": 0,
+                "carbs": 0,
+                "fat": 0,
+            },
+            "error": "AI nutrition failed",
+        }

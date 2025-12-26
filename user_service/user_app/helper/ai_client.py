@@ -24,9 +24,6 @@ def generate_diet_plan(profile_data: dict):
     return response.json()
 
 
-class AIServiceError(Exception):
-    pass
-
 
 def estimate_nutrition(food_text: str) -> dict:
     """
@@ -37,7 +34,7 @@ def estimate_nutrition(food_text: str) -> dict:
     if not food_text or not food_text.strip():
         raise ValueError("food_text cannot be empty")
 
-    url = f"{settings.AI_SERVICE_URL}/api/v1/nutrition-estimate/"
+    url = f"{settings.AI_SERVICE_BASE_URL}/api/v1/diet/estimate-nutrition/"
 
     try:
         response = requests.post(

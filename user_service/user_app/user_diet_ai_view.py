@@ -2,18 +2,17 @@ from datetime import date
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions
-from .models import DietPlan, MealLog
-from .models import UserProfile, DietPlan,WeightLog
+from .models import UserProfile, DietPlan,WeightLog,MealLog
 from .helper.ai_client import generate_diet_plan,estimate_nutrition
 from datetime import date, timedelta
 from .helper.ai_payload import build_payload_from_profile
-from .events.publisher import publish_event
-from django.conf import settings
 from rest_framework import permissions, status
 from user_app.helper.ai_client import AIServiceError
 from django.utils.timezone import now
 from datetime import timedelta
 from django.db import transaction
+from .helper.meals import meal_already_logged
+from .tasks import estimate_nutrition_task
 
 
 def get_week_start():
@@ -25,7 +24,7 @@ class GenerateDietPlanView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        # 1️⃣ Load profile (SOURCE OF TRUTH)
+        # 1️⃣ Load profile
         profile = UserProfile.objects.filter(
             user_id=request.user.id
         ).first()
@@ -36,55 +35,55 @@ class GenerateDietPlanView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # 2️⃣ Check if target weight already achieved
-        current_weight = profile.weight_kg
-        target_weight = profile.target_weight_kg
-        goal = profile.goal
+        today = now().date()
 
-        if goal == "cutting" and current_weight <= target_weight:
-            return Response(
-                {
-                    "status": "completed",
-                    "detail": "Target weight achieved. Diet plan generation stopped.",
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        if goal == "bulking" and current_weight >= target_weight:
-            return Response(
-                {
-                    "status": "completed",
-                    "detail": "Target weight achieved. Diet plan generation stopped.",
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        # 3️⃣ Weekly window
-        week_start = get_week_start()
-        week_end = week_start + timedelta(days=6)
-
-        # 4️⃣ Return existing plan if already generated this week
-        existing_plan = DietPlan.objects.filter(
+        # 2️⃣ Block if active plan already exists
+        active_plan = DietPlan.objects.filter(
             user_id=request.user.id,
-            week_start=week_start,
+            week_start__lte=today,
+            week_end__gte=today,
         ).first()
 
-        if existing_plan:
+        if active_plan:
             return Response(
                 {
                     "has_plan": True,
-                    "daily_calories": existing_plan.daily_calories,
-                    "macros": existing_plan.macros,
-                    "meals": existing_plan.meals,
-                    "version": existing_plan.version,
+                    "detail": "You already have an active diet plan",
+                    "daily_calories": active_plan.daily_calories,
+                    "macros": active_plan.macros,
+                    "meals": active_plan.meals,
+                    "version": active_plan.version,
                 },
                 status=status.HTTP_200_OK,
             )
 
-        # 5️⃣ Build payload (profile → AI-safe dict)
+        # 3️⃣ Stop if target already achieved
+        if profile.goal == "cutting" and profile.weight_kg <= profile.target_weight_kg:
+            return Response(
+                {
+                    "status": "completed",
+                    "detail": "Target weight achieved. Diet plan generation stopped.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        if profile.goal == "bulking" and profile.weight_kg >= profile.target_weight_kg:
+            return Response(
+                {
+                    "status": "completed",
+                    "detail": "Target weight achieved. Diet plan generation stopped.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # 4️⃣ Create new week window
+        week_start = get_week_start()
+        week_end = week_start + timedelta(days=6)
+
+        # 5️⃣ Build AI payload
         payload = build_payload_from_profile(profile)
 
-        # 6️⃣ Call AI service
+        # 6️⃣ Call AI
         try:
             ai_response = generate_diet_plan(payload)
         except AIServiceError:
@@ -93,7 +92,7 @@ class GenerateDietPlanView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # 7️⃣ Persist plan atomically
+        # 7️⃣ Save plan
         with transaction.atomic():
             plan = DietPlan.objects.create(
                 user_id=request.user.id,
@@ -105,10 +104,11 @@ class GenerateDietPlanView(APIView):
                 version=ai_response.get("version", "diet_v1"),
             )
 
-        # 8️⃣ Return response
+        # 8️⃣ Response
         return Response(
             {
                 "has_plan": True,
+                "detail": "New diet plan generated",
                 "daily_calories": plan.daily_calories,
                 "macros": plan.macros,
                 "meals": plan.meals,
@@ -117,7 +117,7 @@ class GenerateDietPlanView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
-    
+
 
 class CurrentDietPlanView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -159,6 +159,17 @@ class FollowMealFromPlanView(APIView):
         if meal_type not in ["breakfast", "lunch", "dinner"]:
             return Response({"detail": "Invalid meal_type"}, status=400)
 
+        # 🔒 block multiple actions
+        if MealLog.objects.filter(
+            user_id=request.user.id,
+            date=today,
+            meal_type=meal_type,
+        ).exists():
+            return Response(
+                {"detail": f"{meal_type} already logged"},
+                status=400,
+            )
+
         plan = DietPlan.objects.filter(
             user_id=request.user.id,
             week_start__lte=today,
@@ -174,23 +185,35 @@ class FollowMealFromPlanView(APIView):
         )
 
         if not meal:
-            return Response({"detail": "Meal not found in plan"}, status=400)
+            return Response({"detail": "Meal not found"}, status=400)
 
-        MealLog.objects.update_or_create(
+        # ✅ READ CORRECT MACRO KEYS
+        macros = plan.macros or {}
+
+        protein_total = macros.get("protein_g", 0)
+        carbs_total = macros.get("carbs_g", 0)
+        fat_total = macros.get("fat_g", 0)
+
+        meals_count = 3  # breakfast, lunch, dinner
+
+        MealLog.objects.create(
             user_id=request.user.id,
             date=today,
             meal_type=meal_type,
-            defaults={
-                "source": "planned",
-                "items": meal["items"],
-                "calories": meal.get("calories", 0),
-                "protein": meal.get("protein", 0),
-                "carbs": meal.get("carbs", 0),
-                "fat": meal.get("fat", 0),
-            },
+            source="planned",
+            items=meal["items"],
+            calories=round(plan.daily_calories / meals_count),
+            protein=round(protein_total / meals_count, 1),
+            carbs=round(carbs_total / meals_count, 1),
+            fat=round(fat_total / meals_count, 1),
         )
 
-        return Response({"detail": f"{meal_type} logged from plan"})
+        return Response(
+            {"detail": f"{meal_type} logged from plan"},
+            status=status.HTTP_200_OK,
+        )
+
+
 
 class LogCustomMealWithAIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -198,6 +221,7 @@ class LogCustomMealWithAIView(APIView):
     def post(self, request):
         meal_type = request.data.get("meal_type")
         food_text = request.data.get("food_text")
+        today = date.today()
 
         if meal_type not in ["breakfast", "lunch", "dinner"]:
             return Response({"detail": "Invalid meal_type"}, status=400)
@@ -205,57 +229,64 @@ class LogCustomMealWithAIView(APIView):
         if not food_text or not food_text.strip():
             return Response({"detail": "food_text required"}, status=400)
 
-        ai_result = estimate_nutrition(food_text)
-        total = ai_result["total"]
+        if meal_already_logged(request.user.id, today, meal_type):
+            return Response(
+                {"detail": f"{meal_type} already logged"},
+                status=400,
+            )
 
-        if total["calories"] <= 0 or total["calories"] > 3000:
-            return Response({"detail": "Invalid nutrition estimate"}, status=400)
-
-        MealLog.objects.update_or_create(
+        meal = MealLog.objects.create(
             user_id=request.user.id,
-            date=date.today(),
+            date=today,
             meal_type=meal_type,
-            defaults={
-                "source": "custom",
-                "items": ai_result["items"],
-                "calories": total["calories"],
-                "protein": total["protein"],
-                "carbs": total["carbs"],
-                "fat": total["fat"],
-            },
+            source="custom",
+            items=[x.strip() for x in food_text.split(",")],
+            calories=0,
+            protein=0,
+            carbs=0,
+            fat=0,
         )
+
+        # 🔥 ASYNC
+        estimate_nutrition_task.delay(meal.id)
 
         return Response(
-            {
-                "detail": "Custom meal logged",
-                "nutrition": total,
-            }
+            {"detail": "Custom meal logged. Nutrition estimation in progress."},
+            status=200,
         )
+    
+
 
 class SkipMealView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         meal_type = request.data.get("meal_type")
+        today = date.today()
 
         if meal_type not in ["breakfast", "lunch", "dinner"]:
             return Response({"detail": "Invalid meal_type"}, status=400)
 
-        MealLog.objects.update_or_create(
+        if meal_already_logged(request.user.id, today, meal_type):
+            return Response(
+                {"detail": f"{meal_type} already logged"},
+                status=400,
+            )
+
+        MealLog.objects.create(
             user_id=request.user.id,
-            date=date.today(),
+            date=today,
             meal_type=meal_type,
-            defaults={
-                "source": "skipped",
-                "items": None,
-                "calories": 0,
-                "protein": 0,
-                "carbs": 0,
-                "fat": 0,
-            },
+            source="skipped",
+            items=None,
+            calories=0,
+            protein=0,
+            carbs=0,
+            fat=0,
         )
 
-        return Response({"detail": f"{meal_type} skipped"})
+        return Response({"detail": f"{meal_type} skipped"})    
+
 
 
 class LogExtraMealView(APIView):
@@ -267,30 +298,26 @@ class LogExtraMealView(APIView):
         if not food_text or not food_text.strip():
             return Response({"detail": "food_text required"}, status=400)
 
-        ai_result = estimate_nutrition(food_text)
-        total = ai_result["total"]
-
-        if total["calories"] <= 0 or total["calories"] > 3000:
-            return Response({"detail": "Invalid nutrition estimate"}, status=400)
-
-        MealLog.objects.create(
+        meal = MealLog.objects.create(
             user_id=request.user.id,
             date=date.today(),
             meal_type="other",
             source="extra",
-            items=ai_result["items"],
-            calories=total["calories"],
-            protein=total["protein"],
-            carbs=total["carbs"],
-            fat=total["fat"],
+            items=[x.strip() for x in food_text.split(",")],
+            calories=0,
+            protein=0,
+            carbs=0,
+            fat=0,
         )
 
+        # 🔥 ASYNC
+        estimate_nutrition_task.delay(meal.id)
+
         return Response(
-            {
-                "detail": "Extra meal logged",
-                "nutrition": total,
-            }
+            {"detail": "Extra meal logged. Nutrition estimation in progress."},
+            status=200,
         )
+
 
 
 
@@ -300,12 +327,66 @@ class UpdateWeightView(APIView):
     def post(self, request):
         weight = request.data.get("weight_kg")
 
-        if not weight or float(weight) <= 0:
-            return Response({"detail": "Invalid weight"}, status=400)
+        # ---------------------------
+        # 1️⃣ Validate input
+        # ---------------------------
+        try:
+            weight = float(weight)
+            if weight <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "Invalid weight value"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         today = now().date()
 
-        # 1️⃣ Enforce weekly update rule
+        # ---------------------------
+        # 2️⃣ Load profile
+        # ---------------------------
+        profile = UserProfile.objects.filter(
+            user_id=request.user.id
+        ).first()
+
+        if not profile:
+            return Response(
+                {"detail": "Profile not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # ---------------------------
+        # 3️⃣ Get active diet plan
+        # ---------------------------
+        current_plan = DietPlan.objects.filter(
+            user_id=request.user.id,
+            week_start__lte=today,
+            week_end__gte=today,
+        ).first()
+
+        if not current_plan:
+            return Response(
+                {"detail": "No active diet plan found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---------------------------
+        # 4️⃣ Enforce FULL WEEK completion
+        # ---------------------------
+        if today < current_plan.week_end:
+            return Response(
+                {
+                    "detail": (
+                        "You can update weight only after completing "
+                        "the current diet week"
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---------------------------
+        # 5️⃣ Enforce once-per-week weight update
+        # ---------------------------
         last_log = (
             WeightLog.objects
             .filter(user_id=request.user.id)
@@ -316,60 +397,39 @@ class UpdateWeightView(APIView):
         if last_log and (today - last_log.logged_at).days < 7:
             return Response(
                 {"detail": "Weight can be updated only once per week"},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        profile = UserProfile.objects.filter(
-            user_id=request.user.id
-        ).first()
+        # ---------------------------
+        # 6️⃣ Generate next plan window
+        # ---------------------------
+        new_week_start = today + timedelta(days=1)
+        new_week_end = new_week_start + timedelta(days=6)
 
-        if not profile:
-            return Response({"detail": "Profile not found"}, status=404)
-
-        # 2️⃣ Close current diet plan (if any)
-        current_plan = DietPlan.objects.filter(
-            user_id=request.user.id,
-            week_start__lte=today,
-            week_end__gte=today,
-        ).first()
-
-        if not current_plan:
-            return Response(
-                {"detail": "No active diet plan to update"},
-                status=400,
-            )
-
+        # ---------------------------
+        # 7️⃣ Atomic update + regeneration
+        # ---------------------------
         with transaction.atomic():
             # update profile weight
-            profile.weight_kg = float(weight)
+            profile.weight_kg = weight
             profile.save(update_fields=["weight_kg"])
 
             # log weight
             WeightLog.objects.create(
                 user_id=request.user.id,
-                weight_kg=float(weight),
+                weight_kg=weight,
                 logged_at=today,
             )
 
-            # close current plan early
-            current_plan.week_end = today
-            current_plan.save(update_fields=["week_end"])
-
-            # 3️⃣ Generate NEW plan for next week
-            new_week_start = today
-            new_week_end = today + timedelta(days=6)
-
+            # generate new plan
             payload = build_payload_from_profile(profile)
 
             try:
                 ai_response = generate_diet_plan(payload)
             except AIServiceError:
-                return Response(
-                    {"detail": "AI service unavailable"},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
+                raise  # rollback transaction
 
-            DietPlan.objects.create(
+            new_plan = DietPlan.objects.create(
                 user_id=request.user.id,
                 week_start=new_week_start,
                 week_end=new_week_end,
@@ -379,14 +439,19 @@ class UpdateWeightView(APIView):
                 version=ai_response.get("version", "diet_v1"),
             )
 
+        # ---------------------------
+        # 8️⃣ Return response
+        # ---------------------------
         return Response(
             {
                 "detail": "Weight updated and new diet plan generated",
                 "new_plan": {
-                    "daily_calories": ai_response["daily_calories"],
-                    "macros": ai_response["macros"],
-                    "meals": ai_response["meals"],
+                    "week_start": new_plan.week_start,
+                    "week_end": new_plan.week_end,
+                    "daily_calories": new_plan.daily_calories,
+                    "macros": new_plan.macros,
+                    "meals": new_plan.meals,
                 },
             },
-            status=200,
+            status=status.HTTP_200_OK,
         )

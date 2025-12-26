@@ -139,20 +139,18 @@ class MealLog(models.Model):
     SOURCE_TYPES = (
         ("planned", "Planned"),
         ("custom", "Custom"),
-        ("extra", "Extra"),
         ("skipped", "Skipped"),
+        ("extra", "Extra"),
     )
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField()
-
     date = models.DateField()
     meal_type = models.CharField(max_length=20, choices=MEAL_TYPES)
     source = models.CharField(max_length=20, choices=SOURCE_TYPES)
 
     items = models.JSONField(null=True, blank=True)
 
-    calories = models.IntegerField(default=0)
+    calories = models.PositiveIntegerField(default=0)
     protein = models.FloatField(default=0)
     carbs = models.FloatField(default=0)
     fat = models.FloatField(default=0)
@@ -160,9 +158,11 @@ class MealLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        indexes = [
-            models.Index(fields=["user_id", "date"]),
-            models.Index(fields=["user_id", "date", "meal_type"]),
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user_id", "date", "meal_type"],
+                name="unique_meal_per_user_per_day",
+            )
         ]
 
 

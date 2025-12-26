@@ -16,16 +16,17 @@ class DailyDietAnalyticsView(APIView):
     def get(self, request):
         date_str = request.query_params.get("date")
 
-        if date_str:
-            try:
-                target_date = date.fromisoformat(date_str)
-            except ValueError:
-                return Response(
-                    {"detail": "Invalid date format (YYYY-MM-DD)"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        else:
-            target_date = date.today()
+        try:
+            target_date = (
+                date.fromisoformat(date_str)
+                if date_str
+                else date.today()
+            )
+        except ValueError:
+            return Response(
+                {"detail": "Invalid date format. Use YYYY-MM-DD"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         analytics = get_daily_analytics(
             user_id=request.user.id,
@@ -52,6 +53,7 @@ class WeeklyDietAnalyticsView(APIView):
         return Response(analytics, status=status.HTTP_200_OK)
 
 
+
 class MonthlyDietAnalyticsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -68,9 +70,11 @@ class MonthlyDietAnalyticsView(APIView):
         try:
             year = int(year)
             month = int(month)
+            if month < 1 or month > 12:
+                raise ValueError
         except ValueError:
             return Response(
-                {"detail": "year and month must be integers"},
+                {"detail": "Invalid year or month"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
