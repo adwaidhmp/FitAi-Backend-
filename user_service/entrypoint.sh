@@ -15,38 +15,39 @@ wait_for() {
   echo "${name} is ready!"
 }
 
-# Wait for DB if configured
-if [ -n "${DB_HOST:-}" ]; then
-  DB_PORT="${DB_PORT:-5432}"
-  wait_for "$DB_HOST" "$DB_PORT" "Database"
-fi
-
-echo "Running migrations..."
-python manage.py migrate --noinput || echo "Migration failed but continuing"
-
 case "${SERVICE_ROLE:-web}" in
+
   web)
+    if [ -n "${DB_HOST:-}" ]; then
+      DB_PORT="${DB_PORT:-5432}"
+      wait_for "$DB_HOST" "$DB_PORT" "Database"
+    fi
+
+    echo "Running migrations..."
+    python manage.py migrate --noinput
+
     echo "Starting Django web server..."
     python manage.py runserver 0.0.0.0:8000
     ;;
+
   user_consumer)
-  echo "Waiting for RabbitMQ..."
-  wait_for "rabbitmq" "5672" "RabbitMQ"
-  echo "Starting USER profile RabbitMQ consumer..."
-  python manage.py run_rabbit_consumer
-  ;;
+    wait_for "rabbitmq" "5672" "RabbitMQ"
+    echo "Starting USER profile RabbitMQ consumer..."
+    python manage.py run_rabbit_consumer
+    ;;
+
   trainer_consumer)
-  echo "Waiting for RabbitMQ..."
-  wait_for "rabbitmq" "5672" "RabbitMQ"
-  echo "Starting TRAINER RabbitMQ consumer..."
-  python manage.py run_rabbit_trainer_consumer
-  ;;
+    wait_for "rabbitmq" "5672" "RabbitMQ"
+    echo "Starting TRAINER RabbitMQ consumer..."
+    python manage.py run_rabbit_trainer_consumer
+    ;;
+
   celery_worker)
-  echo "Waiting for RabbitMQ..."
-  wait_for "rabbitmq" "5672" "RabbitMQ"
-  echo "Starting Celery worker..."
-  celery -A user_service worker -l info
-  ;;
+    wait_for "rabbitmq" "5672" "RabbitMQ"
+    echo "Starting Celery worker..."
+    celery -A user_service.celery worker -l info -Q user_tasks
+    ;;
+
   *)
     echo "❌ Unknown SERVICE_ROLE: ${SERVICE_ROLE}"
     exit 1

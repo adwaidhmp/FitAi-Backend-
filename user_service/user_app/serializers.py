@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import UserProfile
+from .models import UserProfile,WorkoutPlan,WorkoutLog
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -145,3 +145,24 @@ class UserProfileSerializer(serializers.ModelSerializer):
         instance = self._set_user_and_completion(instance)
         instance.save()
         return instance
+
+
+#workout serializer 
+class WorkoutPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkoutPlan
+        fields = [
+            "week_start",
+            "week_end",
+            "goal",
+            "workout_type",
+            "sessions",
+            "estimated_weekly_calories",
+            "created_at",
+        ]
+    
+
+class WorkoutLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkoutLog
+        fields = "__all__"

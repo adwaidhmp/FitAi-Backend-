@@ -46,7 +46,6 @@ services:
     command: celery -A auth_service worker -l info
     depends_on:
       - redis
-      - rabbitmq
 
   # -------- User Service (WEB) ----------
   user-service:
@@ -83,6 +82,7 @@ services:
       - .env
     environment:
       SERVICE_ROLE: celery_worker
+    command: celery -A user_service.celery worker -l info -Q user_tasks
     depends_on:
       - rabbitmq
 

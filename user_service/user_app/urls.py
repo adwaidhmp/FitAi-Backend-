@@ -8,8 +8,8 @@ from .views import (BookTrainerView, MyTrainersView, ProfileChoicesView,
 from .user_diet_ai_view import (GenerateDietPlanView,FollowMealFromPlanView,LogCustomMealWithAIView,
                                 SkipMealView,UpdateWeightView,CurrentDietPlanView,LogExtraMealView)
 
-from .diet_analytics_view import (DailyDietAnalyticsView,WeeklyDietAnalyticsView,MonthlyDietAnalyticsView)
-
+from .diet_analytics_view import (DailyDietAnalyticsView,WeeklyDietAnalyticsView,MonthlyDietAnalyticsView,TodayMealStatusView)
+from .user_workout_view import (GenerateWorkoutView,GetCurrentWorkoutView,LogWorkoutExerciseView,GetTodayWorkoutLogsView)
 urlpatterns = [
     path("profile/", UserProfileView.as_view(), name="user-profile"),
     path("choices/", ProfileChoicesView.as_view(), name="profile-choices"),
@@ -31,6 +31,7 @@ urlpatterns = [
     path("diet/skip-meal/", SkipMealView.as_view()),
     path("diet/extra-meal/",LogExtraMealView.as_view()),
     path("diet/update-weight/", UpdateWeightView.as_view()),
+    path("diet/today/",TodayMealStatusView.as_view()),
 
     #diet graphs and analysis urls will be here
     path(
@@ -48,5 +49,12 @@ urlpatterns = [
         MonthlyDietAnalyticsView.as_view(),
         name="diet-analytics-monthly",
     ),
+
+
+    #workout generation ai
+    path("workout/generate/", GenerateWorkoutView.as_view()),
+    path("workout/current/", GetCurrentWorkoutView.as_view()),
+    path("workout/log/", LogWorkoutExerciseView.as_view()),
+    path("workout/logs/today/", GetTodayWorkoutLogsView.as_view()),
 ]
 

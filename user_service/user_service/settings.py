@@ -1,7 +1,7 @@
 import os
 from datetime import timedelta
 from pathlib import Path
-
+from kombu import Queue
 from decouple import config
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -115,10 +115,16 @@ USER_SERVICE_URL = os.getenv("USER_SERVICE_URL")
 TRAINER_SERVICE_URL = os.getenv("TRAINER_SERVICE_URL")
 AI_SERVICE_BASE_URL= os.getenv("AI_SERVICE_BASE_URL")
 
+CELERY_BROKER_URL =os.getenv("RABBIT_URL")
 
 #CELERY CONF
 
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")
+CELERY_TASK_DEFAULT_QUEUE = "user_tasks"
+
+CELERY_TASK_QUEUES = (
+    Queue("user_tasks"),
+)
+
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 

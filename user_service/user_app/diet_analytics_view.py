@@ -2,6 +2,7 @@ from datetime import date
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
+from .models import MealLog
 
 from .helper.diet_analytics_helper import (
     get_daily_analytics,
@@ -85,3 +86,31 @@ class MonthlyDietAnalyticsView(APIView):
         )
 
         return Response(analytics, status=status.HTTP_200_OK)
+
+
+#daily meal status view for frontend rendering 
+
+class TodayMealStatusView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        today = date.today()
+
+        logs = MealLog.objects.filter(
+            user_id=request.user.id,
+            date=today,
+        ).exclude(meal_type="other")
+
+        status = {
+            "breakfast": None,
+            "lunch": None,
+            "dinner": None,
+        }
+
+        for log in logs:
+            status[log.meal_type] = log.source
+
+        return Response({
+            "date": today,
+            "meals": status,
+        })

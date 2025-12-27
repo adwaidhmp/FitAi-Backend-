@@ -1,5 +1,5 @@
 import uuid
-
+from django.db.models import Q
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
@@ -106,6 +106,10 @@ class UserProfile(models.Model):
         return f"Profile {self.user_id}"
 
 
+
+
+#Ai deit generation model
+
 class DietPlan(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField()
@@ -161,7 +165,8 @@ class MealLog(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["user_id", "date", "meal_type"],
-                name="unique_meal_per_user_per_day",
+                condition=~Q(meal_type="other"),
+                name="unique_main_meal_per_user_per_day",
             )
         ]
 
@@ -176,6 +181,10 @@ class WeightLog(models.Model):
             models.Index(fields=["user_id", "logged_at"]),
         ]
 
+
+
+
+#Trainer booking model
 
 class TrainerBooking(models.Model):
     STATUS_PENDING = "pending"
@@ -212,3 +221,55 @@ class TrainerBooking(models.Model):
     def __str__(self):
         return f"{self.user_id} → {self.trainer_user_id} ({self.status})"
 
+
+
+#Ai workout model
+
+class WorkoutPlan(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user_id = models.UUIDField(db_index=True)
+
+    week_start = models.DateField(db_index=True)
+    week_end = models.DateField(db_index=True)
+
+    goal = models.CharField(max_length=32)
+    workout_type = models.CharField(
+        max_length=16,
+        choices=[("cardio", "Cardio"), ("strength", "Strength"), ("mixed", "Mixed")],
+    )
+
+    sessions = models.JSONField()
+    estimated_weekly_calories = models.PositiveIntegerField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "workout_plan"
+        unique_together = ("user_id", "week_start")
+
+    def __str__(self):
+        return f"WorkoutPlan {self.user_id} {self.week_start}"
+
+
+
+class WorkoutLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user_id = models.UUIDField(db_index=True)
+    date = models.DateField(db_index=True)
+
+    exercise_name = models.CharField(max_length=128)
+    duration_sec = models.PositiveIntegerField(default=0)
+    calories_burnt = models.PositiveIntegerField(default=0)
+
+    status = models.CharField(
+        max_length=16,
+        choices=[("completed", "Completed"), ("skipped", "Skipped")],
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user_id", "date", "exercise_name")
+        db_table = "workout_log"
