@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-
+from .models import UserProfile
 from .tasks import generate_weekly_workout_task
 from .helper.week_date_helper import get_week_range
 from datetime import date
@@ -64,9 +64,15 @@ class LogWorkoutExerciseView(APIView):
         today = date.today()
 
         exercise_name = request.data.get("exercise_name")
-        duration_sec = request.data.get("duration_sec", 0)
+        duration_sec = int(request.data.get("duration_sec", 0))
         intensity = request.data.get("intensity")
         status_value = request.data.get("status")  # completed | skipped
+
+        if not exercise_name:
+            return Response(
+                {"error": "exercise_name required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if status_value not in ["completed", "skipped"]:
             return Response(
@@ -75,6 +81,7 @@ class LogWorkoutExerciseView(APIView):
             )
 
         week_start, _ = get_week_range(today)
+
         plan = WorkoutPlan.objects.filter(
             user_id=user_id,
             week_start=week_start,
@@ -86,7 +93,7 @@ class LogWorkoutExerciseView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # 🚫 BLOCK repeated logging
+        # 🚫 Block repeated logging for same exercise/day
         if WorkoutLog.objects.filter(
             user_id=user_id,
             date=today,
@@ -98,10 +105,13 @@ class LogWorkoutExerciseView(APIView):
             )
 
         calories = 0
+
         if status_value == "completed":
+            profile = UserProfile.objects.get(user_id=user_id)
+
             calories = calculate_calories(
                 duration_sec=duration_sec,
-                weight_kg=request.user.profile.weight_kg,
+                weight_kg=profile.weight_kg,
                 intensity=intensity,
             )
 
@@ -122,7 +132,6 @@ class LogWorkoutExerciseView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
-
 
 
 class GetTodayWorkoutLogsView(APIView):

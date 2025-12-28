@@ -25,6 +25,10 @@ class GenerateWorkoutAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        # ✅ FIX: normalize equipment
+        if data["workout_type"] in ("strength", "mixed"):
+            data["equipment"] = data.get("equipment") or ["bodyweight"]
+
         try:
             ai_result = generate_weekly_workout(
                 profile_data=data,

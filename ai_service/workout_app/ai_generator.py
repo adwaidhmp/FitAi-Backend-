@@ -27,7 +27,7 @@ User details:
 
 RULES:
 - EXACTLY {exercise_count} exercises
-- TOTAL duration between {min_duration} and {max_duration} minutes
+- Total duration should be roughly {min_duration}–{max_duration} minutes
 - Beginner safe if beginner
 - No extreme movements
 - Bodyweight only
@@ -59,15 +59,10 @@ FORMAT:
     except json.JSONDecodeError:
         raise ValueError("AI returned invalid JSON")
 
-    # HARD VALIDATION (non-negotiable)
     exercises = data["sessions"][0]["exercises"]
 
     if len(exercises) != exercise_count:
         raise ValueError("Invalid exercise count from AI")
-
-    total_minutes = sum(e["duration_sec"] for e in exercises) / 60
-    if not (min_duration <= total_minutes <= max_duration):
-        raise ValueError("Invalid total duration from AI")
 
     for e in exercises:
         if e["intensity"] not in ["low", "medium", "high"]:

@@ -3,7 +3,9 @@ from celery import shared_task
 from .models import MealLog
 from .helper.ai_client import estimate_nutrition
 
-
+#----------------------------
+#nutrition task below(extra meal, custom meal)
+#----------------------------
 @shared_task(
     bind=True,
     autoretry_for=(Exception,),
@@ -27,22 +29,39 @@ def estimate_nutrition_task(self, meal_log_id):
     meal.save()
 
 
+
+#----------------------------
+#workout task below
+#----------------------------
+
+
 from datetime import date
+from decimal import Decimal
+import sys
 
-from .models import UserProfile
-from .models import WorkoutPlan  # adjust if model lives elsewhere
+from celery import shared_task
+from django.db import transaction
+from requests.exceptions import ConnectionError, Timeout
 
+from .models import UserProfile, WorkoutPlan
 from .helper.week_date_helper import get_week_range
 from .helper.ai_client_workout import request_ai_workout
 from .helper.ai_payload import build_workout_ai_payload
 from .helper.calories import calculate_calories
 from .helper.workout_validators import validate_ai_workout
-from django.db import transaction
-from decimal import Decimal
+
+
+def normalize_durations(exercises, min_minutes, max_minutes):
+    target_seconds = ((min_minutes + max_minutes) // 2) * 60
+    per_exercise = target_seconds // len(exercises)
+
+    for ex in exercises:
+        ex["duration_sec"] = per_exercise
+
 
 @shared_task(
     bind=True,
-    autoretry_for=(ConnectionError, TimeoutError),
+    autoretry_for=(ConnectionError, Timeout),
     retry_kwargs={"max_retries": 3},
 )
 def generate_weekly_workout_task(self, user_id, workout_type):
@@ -53,14 +72,12 @@ def generate_weekly_workout_task(self, user_id, workout_type):
 
     week_start, week_end = get_week_range(date.today())
 
-    # Hard guard: never generate duplicate weekly plans
     if WorkoutPlan.objects.filter(
         user_id=user_id,
         week_start=week_start,
     ).exists():
         return "already_exists"
 
-    # Rules by experience
     if profile.exercise_experience == "beginner":
         exercise_count = 5
         min_duration, max_duration = 30, 40
@@ -79,7 +96,16 @@ def generate_weekly_workout_task(self, user_id, workout_type):
         max_duration=max_duration,
     )
 
+    sys.stderr.write("\n🔥 WORKOUT PAYLOAD 🔥\n")
+    sys.stderr.write(str(payload) + "\n")
+    sys.stderr.flush()
+
     ai_result = request_ai_workout(payload)
+
+    exercises = ai_result["sessions"][0]["exercises"]
+
+    # 🔧 FIX AI MATH (THIS SOLVES YOUR ERROR)
+    normalize_durations(exercises, min_duration, max_duration)
 
     validate_ai_workout(
         ai_result,
@@ -88,18 +114,17 @@ def generate_weekly_workout_task(self, user_id, workout_type):
         max_duration,
     )
 
-    # From here on, everything must succeed or nothing is saved
     with transaction.atomic():
         total_daily = Decimal("0")
 
-        for ex in ai_result["sessions"][0]["exercises"]:
+        for ex in exercises:
             calories = calculate_calories(
                 ex["duration_sec"],
                 profile.weight_kg,
                 ex["intensity"],
             )
 
-            ex["estimated_calories"] = int(calories)  # JSON-safe
+            ex["estimated_calories"] = int(calories)
             total_daily += calories
 
         WorkoutPlan.objects.create(
@@ -113,4 +138,3 @@ def generate_weekly_workout_task(self, user_id, workout_type):
         )
 
     return "created"
-

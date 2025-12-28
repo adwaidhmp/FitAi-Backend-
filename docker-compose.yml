@@ -82,7 +82,10 @@ services:
       - .env
     environment:
       SERVICE_ROLE: celery_worker
-    command: celery -A user_service.celery worker -l info -Q user_tasks
+    command: >
+      celery -A user_service worker
+      --loglevel=INFO
+      --pool=solo
     depends_on:
       - rabbitmq
 

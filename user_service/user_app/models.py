@@ -107,6 +107,45 @@ class UserProfile(models.Model):
 
 
 
+#Trainer booking model
+
+class TrainerBooking(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_REJECTED, "Rejected"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user_id = models.UUIDField()
+    trainer_user_id = models.UUIDField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["trainer_user_id"]),
+            models.Index(fields=["user_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} → {self.trainer_user_id} ({self.status})"
+
+        
+
 
 #Ai deit generation model
 
@@ -180,46 +219,6 @@ class WeightLog(models.Model):
         indexes = [
             models.Index(fields=["user_id", "logged_at"]),
         ]
-
-
-
-
-#Trainer booking model
-
-class TrainerBooking(models.Model):
-    STATUS_PENDING = "pending"
-    STATUS_APPROVED = "approved"
-    STATUS_REJECTED = "rejected"
-    STATUS_CANCELLED = "cancelled"
-
-    STATUS_CHOICES = [
-        (STATUS_PENDING, "Pending"),
-        (STATUS_APPROVED, "Approved"),
-        (STATUS_REJECTED, "Rejected"),
-        (STATUS_CANCELLED, "Cancelled"),
-    ]
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-    user_id = models.UUIDField()
-    trainer_user_id = models.UUIDField()
-
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_PENDING,
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["trainer_user_id"]),
-            models.Index(fields=["user_id"]),
-        ]
-
-    def __str__(self):
-        return f"{self.user_id} → {self.trainer_user_id} ({self.status})"
 
 
 
