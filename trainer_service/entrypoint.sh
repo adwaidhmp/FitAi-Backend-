@@ -25,18 +25,24 @@ echo "Running migrations..."
 python manage.py migrate --noinput || echo "Migration failed but continuing"
 
 case "${SERVICE_ROLE:-web}" in
+
   web)
     echo "Starting Django web server..."
     python manage.py runserver 0.0.0.0:8000
     ;;
-  user_consumer)
-    echo "Starting USER diet RabbitMQ consumer..."
-    python manage.py diet_worker
-    ;;
+
   trainer_consumer)
+    wait_for "rabbitmq" "5672" "RabbitMQ"
     echo "Starting TRAINER RabbitMQ consumer..."
     python manage.py run_rabbit_trainer_consumer
     ;;
+
+  celery_worker)
+    wait_for "rabbitmq" "5672" "RabbitMQ"
+    echo "Starting TRAINER Celery worker..."
+    celery -A trainer_service.celery worker -l info --pool=solo
+    ;;
+
   *)
     echo "❌ Unknown SERVICE_ROLE: ${SERVICE_ROLE}"
     exit 1

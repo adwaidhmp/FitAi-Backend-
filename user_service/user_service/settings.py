@@ -23,6 +23,9 @@ INSTALLED_APPS = [
     "corsheaders",
     
     "user_app",
+
+    "channels",
+    "chat",
 ]
 
 MIDDLEWARE = [
@@ -131,3 +134,15 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+
+ASGI_APPLICATION = "user_service.asgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("redis", 6379)],
+        },
+    },
+}

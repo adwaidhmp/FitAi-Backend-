@@ -13,7 +13,7 @@ from .permissions import IsTrainerOwner
 from .serializers import (CertificateUploadSerializer,
                           TrainerCertificateModelSerializer,
                           TrainerProfileSerializer)
-
+from .tasks import publish_booking_decision
 
 class TrainerProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsTrainerOwner]
@@ -160,44 +160,27 @@ class PendingClientsView(APIView):
         return Response(result, status=200)
 
 
-class DecideUserBookingView(APIView):
+class DecideBookingView(APIView):
     permission_classes = [IsAuthenticated, IsTrainerOwner]
 
     def post(self, request, booking_id):
-        auth_header = request.headers.get("Authorization")
-
         action = request.data.get("action")
+
         if action not in ["approve", "reject"]:
-            return Response(
-                {"detail": "Invalid action"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "Invalid action"}, status=400)
 
-        try:
-            resp = requests.post(
-                f"{settings.USER_SERVICE_URL}/api/v1/user/training/booking/{booking_id}/",
-                json={"action": action},   # ✅ SEND BODY
-                headers={"Authorization": auth_header},
-                timeout=5,
-            )
-        except requests.RequestException:
-            return Response(
-                {"detail": "User service unreachable"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        publish_booking_decision.delay({
+            "event": "BOOKING_DECIDED",
+            "booking_id": str(booking_id),
+            "trainer_user_id": str(request.user.id),
+            "action": action,
+        })
 
-        try:
-            data = resp.json()
-        except ValueError:
-            return Response(
-                {
-                    "detail": "Invalid response from user service",
-                    "raw": resp.text, 
-                },
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
-
-        return Response(data, status=resp.status_code)
+        return Response(
+            {"detail": "Decision queued"},
+            status=202,
+        )
+    
 
 
 class ApprovedUsersView(APIView):

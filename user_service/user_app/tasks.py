@@ -2,7 +2,8 @@
 from celery import shared_task
 from .models import MealLog
 from .helper.ai_client import estimate_nutrition
-
+from .models import TrainerBooking
+from chat.models import ChatRoom
 #----------------------------
 #nutrition task below(extra meal, custom meal)
 #----------------------------
@@ -138,3 +139,41 @@ def generate_weekly_workout_task(self, user_id, workout_type):
         )
 
     return "created"
+
+
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=3,
+    retry_kwargs={"max_retries": 5},
+)
+def handle_booking_decision(self, payload):
+    if payload.get("event") != "BOOKING_DECIDED":
+        return
+
+    booking = TrainerBooking.objects.filter(
+        id=payload["booking_id"],
+        trainer_user_id=payload["trainer_user_id"],
+        status=TrainerBooking.STATUS_PENDING,
+    ).first()
+
+    if not booking:
+        return
+
+    action = payload.get("action", "").lower()
+    print("ACTION:", action)
+
+    if action == "approve":
+        booking.status = TrainerBooking.STATUS_APPROVED
+        booking.save(update_fields=["status"])
+
+        room, created = ChatRoom.objects.get_or_create(
+            user_id=booking.user_id,
+            trainer_user_id=booking.trainer_user_id,
+        )
+
+        print("ChatRoom created:", created, "room_id:", room.id)
+
+    else:
+        booking.status = TrainerBooking.STATUS_REJECTED
+        booking.save(update_fields=["status"])

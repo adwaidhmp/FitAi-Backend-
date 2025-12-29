@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .user_trainer_view import (ApprovedTrainerListView,
-                                ApprovedUsersForTrainerView, DecideBookingView,
+                                ApprovedUsersForTrainerView, 
                                 PendingClientsTrainer)
 from .views import (BookTrainerView, MyTrainersView, ProfileChoicesView,
                     RemoveTrainerView, UserProfileView)
@@ -20,7 +20,6 @@ urlpatterns = [
 
     # service url for trainer to see pending clients and approve booking
     path("training/pending/", PendingClientsTrainer.as_view()),
-    path("training/booking/<uuid:booking_id>/", DecideBookingView.as_view()),
     path("training/bookings/approved/", ApprovedUsersForTrainerView.as_view()),
 
     #urls for ai diet plan follow

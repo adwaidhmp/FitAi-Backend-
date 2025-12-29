@@ -74,6 +74,7 @@ class ApprovedTrainerListView(APIView):
         return Response(result)
 
 
+#internal use for trainer to see pending clients    
 class PendingClientsTrainer(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -111,47 +112,7 @@ class PendingClientsTrainer(APIView):
         return Response(data, status=200)
 
 
-class DecideBookingView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, booking_id):
-        trainer_id = request.user.id
-        action = request.data.get("action")
-
-        if action not in ["approve", "reject"]:
-            return Response(
-                {"detail": "Invalid action"},
-                status=400,
-            )
-
-        booking = TrainerBooking.objects.filter(
-            id=booking_id,
-            trainer_user_id=trainer_id,
-            status=TrainerBooking.STATUS_PENDING,
-        ).first()
-
-        if not booking:
-            return Response(
-                {"detail": "Booking not found or not pending"},
-                status=404,
-            )
-
-        if action == "approve":
-            booking.status = TrainerBooking.STATUS_APPROVED
-        else:
-            booking.status = TrainerBooking.STATUS_REJECTED
-
-        booking.save(update_fields=["status"])
-
-        return Response(
-            {
-                "detail": f"Booking {action}d",
-                "status": booking.status,
-            },
-            status=200,
-        )
-
-
+#internal use for trainer to see approved users
 class ApprovedUsersForTrainerView(APIView):
     permission_classes = [IsAuthenticated, IsTrainer]
 

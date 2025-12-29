@@ -3,7 +3,7 @@ from django.urls import path
 from .admin_trainer_views import AdminTrainerProfileView
 from .user_trainer_views import TrainerProfilesByUserIdsView
 from .views import (TrainerProfileView,ApprovedUsersView,
-                    DecideUserBookingView, PendingClientsView)
+                    DecideBookingView, PendingClientsView)
 
 urlpatterns = [
     path("profile/", TrainerProfileView.as_view(), name="trainer-profile"),
@@ -23,10 +23,12 @@ urlpatterns = [
     ),
     path(
         "bookings/<uuid:booking_id>/decison/",
-        DecideUserBookingView.as_view(),
+        DecideBookingView.as_view(),
     ),
     path(
         "approved-users/",
         ApprovedUsersView.as_view(),
     ),
 ]
+
+print("hai")

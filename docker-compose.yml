@@ -102,6 +102,22 @@ services:
       SERVICE_ROLE: web
     depends_on:
       - rabbitmq
+      
+  # -------- Trainer Celery Worker ----------
+  trainer-worker:
+    build: ./trainer_service
+    volumes:
+      - ./trainer_service:/app
+    env_file:
+      - .env
+    environment:
+      SERVICE_ROLE: celery_worker
+    command: >
+      celery -A trainer_service worker
+      --loglevel=INFO
+      --pool=solo
+    depends_on:
+      - rabbitmq
 
   # -------- Trainer Consumer ----------
   trainer-consumer:
