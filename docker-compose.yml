@@ -60,6 +60,7 @@ services:
       SERVICE_ROLE: web
     depends_on:
       - rabbitmq
+      - redis
 
   # -------- User Consumer ----------
   user-consumer:

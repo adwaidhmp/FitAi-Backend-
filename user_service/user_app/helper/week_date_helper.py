@@ -1,6 +1,7 @@
 # workout/utils.py
 from datetime import date, timedelta
 
+
 def get_week_range(today: date | None = None):
     """
     Returns (week_start, week_end)

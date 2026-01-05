@@ -1,8 +1,12 @@
 from django.urls import path
 
-from .views import (AdminApproveTrainerView, AdminTrainerDetailView,
-                    AdminTrainerListView, AdminUserListView,
-                    AdminUserStatusView)
+from .views import (
+    AdminApproveTrainerView,
+    AdminTrainerDetailView,
+    AdminTrainerListView,
+    AdminUserListView,
+    AdminUserStatusView,
+)
 
 urlpatterns = [
     path("users/", AdminUserListView.as_view()),

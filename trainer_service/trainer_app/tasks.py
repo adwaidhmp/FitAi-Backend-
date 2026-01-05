@@ -1,4 +1,5 @@
-from celery import shared_task, current_app
+from celery import current_app, shared_task
+
 
 @shared_task
 def publish_booking_decision(payload):

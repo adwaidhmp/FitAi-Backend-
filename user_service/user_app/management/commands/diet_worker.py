@@ -1,6 +1,6 @@
 import pika
-from django.core.management.base import BaseCommand
 from django.conf import settings
+from django.core.management.base import BaseCommand
 from user_app.events.consumers import handle_weight_updated
 
 
@@ -8,9 +8,7 @@ class Command(BaseCommand):
     help = "Diet regeneration worker"
 
     def handle(self, *args, **options):
-        connection = pika.BlockingConnection(
-            pika.URLParameters(settings.RABBIT_URL)
-        )
+        connection = pika.BlockingConnection(pika.URLParameters(settings.RABBIT_URL))
         channel = connection.channel()
 
         channel.exchange_declare(

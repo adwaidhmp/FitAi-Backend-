@@ -1,6 +1,8 @@
 import sys
+
 import requests
 from django.conf import settings
+
 
 def request_ai_workout(payload: dict) -> dict:
     url = f"{settings.AI_SERVICE_BASE_URL}/api/v1/workout/generate/"

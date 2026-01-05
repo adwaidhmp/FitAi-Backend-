@@ -20,11 +20,8 @@ def validate_profile_for_diet(profile: dict, allow_medical: bool = False):
     medical_conditions = profile.get("medical_conditions", [])
 
     if medical_conditions and not allow_medical:
-        raise GuardrailError(
-            "Diet plan cannot be generated due to medical conditions"
-        )
+        raise GuardrailError("Diet plan cannot be generated due to medical conditions")
 
     age = profile.get("age")
     if age and (age < 16 or age > 65):
         raise GuardrailError("Age not supported for AI diet")
-

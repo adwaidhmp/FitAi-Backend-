@@ -1,26 +1,63 @@
+from types import SimpleNamespace
 from urllib.parse import parse_qs
-from channels.middleware import BaseMiddleware
-from django.contrib.auth.models import AnonymousUser
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from django.db import close_old_connections
+
+from django.conf import settings
+from channels.db import database_sync_to_async
+from rest_framework_simplejwt.backends import TokenBackend
+from rest_framework_simplejwt.exceptions import TokenError
 
 
-class JWTAuthMiddleware(BaseMiddleware):
+class JWTAuthMiddleware:
+    """
+    WebSocket JWT authentication middleware.
+    Uses SAME logic as SimpleJWTAuth (stateless, no DB lookup).
+    """
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.backend = TokenBackend(
+            algorithm=settings.SIMPLE_JWT.get("ALGORITHM", "HS256"),
+            signing_key=settings.SIMPLE_JWT.get("SIGNING_KEY"),
+        )
+
     async def __call__(self, scope, receive, send):
-        close_old_connections()
+        scope["user"] = None
 
-        query_string = parse_qs(scope["query_string"].decode())
-        token = query_string.get("token")
+        query_string = scope.get("query_string", b"").decode()
+        params = parse_qs(query_string)
+        token_list = params.get("token")
 
-        if token:
-            try:
-                jwt_auth = JWTAuthentication()
-                validated = jwt_auth.get_validated_token(token[0])
-                user = jwt_auth.get_user(validated)
+        if token_list:
+            token = token_list[0]
+            user = await self._get_user_from_token(token)
+            if user:
                 scope["user"] = user
-            except Exception:
-                scope["user"] = AnonymousUser()
-        else:
-            scope["user"] = AnonymousUser()
 
-        return await super().__call__(scope, receive, send)
+        return await self.inner(scope, receive, send)
+
+    @database_sync_to_async
+    def _get_user_from_token(self, token):
+        try:
+            payload = self.backend.decode(token, verify=True)
+
+            user_id = payload.get("sub") or payload.get("user_id") or payload.get("id")
+            if not user_id:
+                return None
+
+            role = payload.get("role")
+            roles = payload.get("roles")
+            if not role and isinstance(roles, list) and roles:
+                role = roles[0]
+
+            user = SimpleNamespace(
+                id=user_id,
+                role=role,
+                token_payload=payload,
+            )
+            user.is_authenticated = True
+            return user
+
+        except TokenError:
+            return None
+        except Exception:
+            return None

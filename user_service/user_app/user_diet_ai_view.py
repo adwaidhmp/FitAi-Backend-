@@ -1,17 +1,16 @@
-from datetime import date
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import permissions
-from .models import UserProfile, DietPlan,WeightLog,MealLog
-from .helper.ai_client import generate_diet_plan,estimate_nutrition
 from datetime import date, timedelta
-from .helper.ai_payload import build_payload_from_profile
-from rest_framework import permissions, status
-from user_app.helper.ai_client import AIServiceError
-from django.utils.timezone import now
-from datetime import timedelta
+
 from django.db import transaction
+from django.utils.timezone import now
+from rest_framework import permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from user_app.helper.ai_client import AIServiceError
+
+from .helper.ai_client import estimate_nutrition, generate_diet_plan
+from .helper.ai_payload import build_payload_from_profile
 from .helper.meals import meal_already_logged
+from .models import DietPlan, MealLog, UserProfile, WeightLog
 from .tasks import estimate_nutrition_task
 
 
@@ -25,9 +24,7 @@ class GenerateDietPlanView(APIView):
 
     def post(self, request):
         # 1️⃣ Load profile
-        profile = UserProfile.objects.filter(
-            user_id=request.user.id
-        ).first()
+        profile = UserProfile.objects.filter(user_id=request.user.id).first()
 
         if not profile:
             return Response(
@@ -118,7 +115,6 @@ class GenerateDietPlanView(APIView):
         )
 
 
-
 class CurrentDietPlanView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -146,7 +142,6 @@ class CurrentDietPlanView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
 
 
 class FollowMealFromPlanView(APIView):
@@ -214,7 +209,6 @@ class FollowMealFromPlanView(APIView):
         )
 
 
-
 class LogCustomMealWithAIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -254,7 +248,6 @@ class LogCustomMealWithAIView(APIView):
             {"detail": "Custom meal logged. Nutrition estimation in progress."},
             status=200,
         )
-    
 
 
 class SkipMealView(APIView):
@@ -285,8 +278,7 @@ class SkipMealView(APIView):
             fat=0,
         )
 
-        return Response({"detail": f"{meal_type} skipped"})    
-
+        return Response({"detail": f"{meal_type} skipped"})
 
 
 class LogExtraMealView(APIView):
@@ -319,8 +311,6 @@ class LogExtraMealView(APIView):
         )
 
 
-
-
 class UpdateWeightView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -345,9 +335,7 @@ class UpdateWeightView(APIView):
         # ---------------------------
         # 2️⃣ Load profile
         # ---------------------------
-        profile = UserProfile.objects.filter(
-            user_id=request.user.id
-        ).first()
+        profile = UserProfile.objects.filter(user_id=request.user.id).first()
 
         if not profile:
             return Response(
@@ -388,8 +376,7 @@ class UpdateWeightView(APIView):
         # 5️⃣ Enforce once-per-week weight update
         # ---------------------------
         last_log = (
-            WeightLog.objects
-            .filter(user_id=request.user.id)
+            WeightLog.objects.filter(user_id=request.user.id)
             .order_by("-logged_at")
             .first()
         )
@@ -455,4 +442,3 @@ class UpdateWeightView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-        

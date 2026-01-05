@@ -1,16 +1,18 @@
 from datetime import date, timedelta
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from .models import MealLog
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from .helper.diet_workout_progress_helpers import (
     daily_progress,
-    weekly_progress,
     monthly_progress,
+    weekly_progress,
 )
 from .helper.week_date_helper import get_week_range
+from .models import MealLog
+
 
 class DailyProgressView(APIView):
     permission_classes = [IsAuthenticated]
@@ -102,8 +104,8 @@ class MonthlyProgressView(APIView):
         return Response({"data": data}, status=status.HTTP_200_OK)
 
 
+# daily meal status view for frontend rendering
 
-#daily meal status view for frontend rendering 
 
 class TodayMealStatusView(APIView):
     permission_classes = [IsAuthenticated]
@@ -125,7 +127,9 @@ class TodayMealStatusView(APIView):
         for log in logs:
             status[log.meal_type] = log.source
 
-        return Response({
-            "date": today,
-            "meals": status,
-        })
+        return Response(
+            {
+                "date": today,
+                "meals": status,
+            }
+        )

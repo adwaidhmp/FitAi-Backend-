@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import UserProfile,WorkoutPlan,WorkoutLog
+
+from .models import UserProfile, WorkoutLog, WorkoutPlan
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -147,7 +148,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return instance
 
 
-#workout serializer 
+# workout serializer
 class WorkoutPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkoutPlan
@@ -160,7 +161,7 @@ class WorkoutPlanSerializer(serializers.ModelSerializer):
             "estimated_weekly_calories",
             "created_at",
         ]
-    
+
 
 class WorkoutLogSerializer(serializers.ModelSerializer):
     class Meta:

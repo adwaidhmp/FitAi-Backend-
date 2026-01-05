@@ -1,24 +1,49 @@
 # chat/serializers.py
+from chat.models import Message
 from rest_framework import serializers
-from .models import Message
+
+
+class UserMessageCreateSerializer(serializers.Serializer):
+    room_id = serializers.UUIDField()
+    type = serializers.ChoiceField(choices=Message.TYPE_CHOICES)
+    text = serializers.CharField(required=False, allow_blank=True)
+    file = serializers.FileField(required=False)
+    duration_sec = serializers.IntegerField(required=False, min_value=1)
+
+    def validate(self, data):
+        msg_type = data["type"]
+
+        if msg_type == Message.TEXT:
+            if not data.get("text"):
+                raise serializers.ValidationError("Text is required")
+            if data.get("file"):
+                raise serializers.ValidationError("File not allowed for text")
+
+        if msg_type == Message.IMAGE:
+            if not data.get("file"):
+                raise serializers.ValidationError("Image file required")
+
+        if msg_type == Message.AUDIO:
+            if not data.get("file"):
+                raise serializers.ValidationError("Audio file required")
+            if not data.get("duration_sec"):
+                raise serializers.ValidationError("duration_sec required")
+
+        return data
 
 
 class MessageSerializer(serializers.ModelSerializer):
-    sender = serializers.IntegerField(source="sender.id", read_only=True)
-    file_url = serializers.SerializerMethodField()
-
     class Meta:
         model = Message
         fields = [
             "id",
-            "room",
-            "sender",
+            "room_id",
+            "sender_user_id",
+            "sender_role",
             "type",
             "text",
-            "file_url",
+            "file",
             "duration_sec",
+            "read_at",
             "created_at",
         ]
-
-    def get_file_url(self, obj):
-        return obj.file.url if obj.file else None

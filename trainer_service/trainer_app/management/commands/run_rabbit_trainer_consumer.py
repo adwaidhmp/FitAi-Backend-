@@ -191,7 +191,7 @@ class Command(BaseCommand):
 
             except (AMQPConnectionError, StreamLostError) as exc:
                 attempt += 1
-                delay = min(2 ** attempt, 30)
+                delay = min(2**attempt, 30)
                 logger.warning(
                     "RabbitMQ connection failed (attempt %d), retrying in %ds: %s",
                     attempt,

@@ -2,8 +2,12 @@ from django.urls import path
 
 from .admin_trainer_views import AdminTrainerProfileView
 from .user_trainer_views import TrainerProfilesByUserIdsView
-from .views import (TrainerProfileView,ApprovedUsersView,
-                    DecideBookingView, PendingClientsView)
+from .views import (
+    ApprovedUsersView,
+    DecideBookingView,
+    PendingClientsView,
+    TrainerProfileView,
+)
 
 urlpatterns = [
     path("profile/", TrainerProfileView.as_view(), name="trainer-profile"),
@@ -22,7 +26,7 @@ urlpatterns = [
         PendingClientsView.as_view(),
     ),
     path(
-        "bookings/<uuid:booking_id>/decison/",
+        "bookings/<uuid:booking_id>/decision/",
         DecideBookingView.as_view(),
     ),
     path(

@@ -1,10 +1,12 @@
-from openai import OpenAI
 from django.conf import settings
+from openai import OpenAI
+
 
 def get_client():
     if not settings.OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY is not set")
     return OpenAI(api_key=settings.OPENAI_API_KEY)
+
 
 def ask_ai(system_prompt: str, user_prompt: str):
     client = get_client()

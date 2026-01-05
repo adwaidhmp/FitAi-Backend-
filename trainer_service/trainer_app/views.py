@@ -10,10 +10,13 @@ from rest_framework.views import APIView
 
 from .models import TrainerCertificate, TrainerProfile
 from .permissions import IsTrainerOwner
-from .serializers import (CertificateUploadSerializer,
-                          TrainerCertificateModelSerializer,
-                          TrainerProfileSerializer)
+from .serializers import (
+    CertificateUploadSerializer,
+    TrainerCertificateModelSerializer,
+    TrainerProfileSerializer,
+)
 from .tasks import publish_booking_decision
+
 
 class TrainerProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsTrainerOwner]
@@ -169,18 +172,54 @@ class DecideBookingView(APIView):
         if action not in ["approve", "reject"]:
             return Response({"detail": "Invalid action"}, status=400)
 
-        publish_booking_decision.delay({
-            "event": "BOOKING_DECIDED",
-            "booking_id": str(booking_id),
-            "trainer_user_id": str(request.user.id),
-            "action": action,
-        })
+        auth_header = request.headers.get("Authorization")
+
+        # 🔹 1. Ask USER SERVICE for booking details
+        try:
+            booking_resp = requests.get(
+                f"{settings.USER_SERVICE_URL}/api/v1/user/training/bookings/{booking_id}/",
+                headers={"Authorization": auth_header},
+                timeout=5,
+            )
+        except (ConnectionError, Timeout):
+            return Response(
+                {"detail": "User service unavailable"},
+                status=503,
+            )
+
+        if booking_resp.status_code != 200:
+            return Response(
+                {"detail": "Failed to fetch booking"},
+                status=booking_resp.status_code,
+            )
+
+        booking = booking_resp.json()
+
+        user_id = booking.get("user_id")
+        trainer_user_id = booking.get("trainer_user_id")
+
+        # 🔐 Safety check
+        if trainer_user_id != str(request.user.id):
+            return Response(
+                {"detail": "Not authorized for this booking"},
+                status=403,
+            )
+
+        # 🔹 2. Publish COMPLETE event
+        publish_booking_decision.delay(
+            {
+                "event": "BOOKING_DECIDED",
+                "booking_id": str(booking_id),
+                "user_id": user_id,                     # ✅ REQUIRED
+                "trainer_user_id": str(request.user.id),
+                "action": action,
+            }
+        )
 
         return Response(
             {"detail": "Decision queued"},
             status=202,
         )
-    
 
 
 class ApprovedUsersView(APIView):

@@ -1,5 +1,5 @@
-from kombu import Connection, Exchange, Queue
 from django.conf import settings
+from kombu import Connection, Exchange, Queue
 from user_app.tasks import handle_booking_decision
 
 exchange = Exchange("booking_events", type="fanout")

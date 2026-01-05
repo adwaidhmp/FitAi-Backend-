@@ -1,8 +1,9 @@
 import os
 from datetime import timedelta
 from pathlib import Path
-from kombu import Queue
+
 from decouple import config
+from kombu import Queue
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -18,12 +19,9 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
     "rest_framework",
     "corsheaders",
-    
     "user_app",
-
     "channels",
     "chat",
 ]
@@ -116,17 +114,15 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL")
 USER_SERVICE_URL = os.getenv("USER_SERVICE_URL")
 TRAINER_SERVICE_URL = os.getenv("TRAINER_SERVICE_URL")
-AI_SERVICE_BASE_URL= os.getenv("AI_SERVICE_BASE_URL")
+AI_SERVICE_BASE_URL = os.getenv("AI_SERVICE_BASE_URL")
 
-CELERY_BROKER_URL =os.getenv("RABBIT_URL")
+CELERY_BROKER_URL = os.getenv("RABBIT_URL")
 
-#CELERY CONF
+# CELERY CONF
 
 CELERY_TASK_DEFAULT_QUEUE = "user_tasks"
 
-CELERY_TASK_QUEUES = (
-    Queue("user_tasks"),
-)
+CELERY_TASK_QUEUES = (Queue("user_tasks"),)
 
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
@@ -135,7 +131,7 @@ CELERY_TIMEZONE = TIME_ZONE
 
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
-
+WSGI_APPLICATION = "user_service.wsgi.application"
 ASGI_APPLICATION = "user_service.asgi.application"
 
 CHANNEL_LAYERS = {

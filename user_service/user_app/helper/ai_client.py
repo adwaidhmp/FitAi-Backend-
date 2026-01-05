@@ -24,7 +24,6 @@ def generate_diet_plan(profile_data: dict):
     return response.json()
 
 
-
 def estimate_nutrition(food_text: str) -> dict:
     """
     Calls ai_service to estimate nutrition for given food text.
@@ -46,9 +45,7 @@ def estimate_nutrition(food_text: str) -> dict:
         raise AIServiceError("AI service not reachable") from e
 
     if response.status_code != 200:
-        raise AIServiceError(
-            f"AI service error: {response.status_code}"
-        )
+        raise AIServiceError(f"AI service error: {response.status_code}")
 
     data = response.json()
 

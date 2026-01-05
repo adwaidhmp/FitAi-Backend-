@@ -1,20 +1,23 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 import json
+import logging
 from datetime import date
-from ai_core.llm_client import ask_ai
+
+from ai_core.ai_nutrition import estimate_nutrition
 from ai_core.calculations import (
+    activity_multiplier,
     calculate_age,
     calculate_bmr,
-    activity_multiplier,
-    target_calories,
     calculate_macros,
+    target_calories,
 )
-from ai_core.guardrails import validate_profile_for_diet, GuardrailError
+from ai_core.guardrails import GuardrailError, validate_profile_for_diet
+from ai_core.llm_client import ask_ai
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from .prompts import SYSTEM_PROMPT, build_prompt
-from ai_core.ai_nutrition import estimate_nutrition
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,18 +77,20 @@ class GenerateDietView(APIView):
             # --- RESPONSE ---
             return Response(
                 {
-                    "version": "medical_safe_v1"
-                    if diet_mode == "medical_safe"
-                    else "diet_v1",
+                    "version": (
+                        "medical_safe_v1" if diet_mode == "medical_safe" else "diet_v1"
+                    ),
                     "daily_calories": calories,
                     "macros": macros,
                     "meals": meals["meals"],
                     "disclaimer": (
-                        "This plan is AI-generated for general guidance only. "
-                        "Not a medical prescription."
-                    )
-                    if diet_mode == "medical_safe"
-                    else "",
+                        (
+                            "This plan is AI-generated for general guidance only. "
+                            "Not a medical prescription."
+                        )
+                        if diet_mode == "medical_safe"
+                        else ""
+                    ),
                 }
             )
 
@@ -94,12 +99,12 @@ class GenerateDietView(APIView):
 
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             return Response(
                 {"error": str(e)},
                 status=500,
             )
-
 
 
 class NutritionEstimateView(APIView):

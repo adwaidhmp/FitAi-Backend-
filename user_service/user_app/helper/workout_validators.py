@@ -1,6 +1,5 @@
+# workout validators
 
-
-#workout validators
 
 def validate_ai_workout(data, expected_count, min_total, max_total):
     sessions = data.get("sessions")

@@ -1,7 +1,8 @@
 import uuid
-from django.db.models import Q
+
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
 
 # ---------- choices ----------
 GENDER_CHOICES = [
@@ -106,8 +107,8 @@ class UserProfile(models.Model):
         return f"Profile {self.user_id}"
 
 
+# Trainer booking model
 
-#Trainer booking model
 
 class TrainerBooking(models.Model):
     STATUS_PENDING = "pending"
@@ -144,10 +145,9 @@ class TrainerBooking(models.Model):
     def __str__(self):
         return f"{self.user_id} → {self.trainer_user_id} ({self.status})"
 
-        
 
+# Ai deit generation model
 
-#Ai deit generation model
 
 class DietPlan(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -157,18 +157,16 @@ class DietPlan(models.Model):
     daily_calories = models.IntegerField()
     macros = models.JSONField()
     meals = models.JSONField()
-    
+
     version = models.CharField(max_length=20, default="diet_v1")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["user_id", "week_start"],
-                name="unique_user_week_plan"
+                fields=["user_id", "week_start"], name="unique_user_week_plan"
             )
         ]
-
 
 
 class MealLog(models.Model):
@@ -221,8 +219,8 @@ class WeightLog(models.Model):
         ]
 
 
+# Ai workout model
 
-#Ai workout model
 
 class WorkoutPlan(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -249,7 +247,6 @@ class WorkoutPlan(models.Model):
 
     def __str__(self):
         return f"WorkoutPlan {self.user_id} {self.week_start}"
-
 
 
 class WorkoutLog(models.Model):

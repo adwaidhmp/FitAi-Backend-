@@ -1,10 +1,8 @@
-
-
 def build_payload_from_profile(profile):
 
     medical_conditions = profile.medical_conditions or []
     diet_mode = "medical_safe" if medical_conditions else "normal"
-    
+
     return {
         "dob": profile.dob.isoformat(),
         "gender": profile.gender,

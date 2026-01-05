@@ -18,16 +18,20 @@ wait_for() {
 case "${SERVICE_ROLE:-web}" in
 
   web)
+    # ---- wait for DB if configured ----
     if [ -n "${DB_HOST:-}" ]; then
       DB_PORT="${DB_PORT:-5432}"
       wait_for "$DB_HOST" "$DB_PORT" "Database"
     fi
 
+    # 🔥 REQUIRED FOR WEBSOCKETS
+    wait_for "redis" "6379" "Redis"
+
     echo "Running migrations..."
     python manage.py migrate --noinput
 
-    echo "Starting Django web server..."
-    python manage.py runserver 0.0.0.0:8000
+    echo "Starting ASGI server (Daphne)..."
+    daphne -b 0.0.0.0 -p 8000 user_service.asgi:application
     ;;
 
   user_consumer)

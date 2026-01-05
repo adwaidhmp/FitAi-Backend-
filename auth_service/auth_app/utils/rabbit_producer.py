@@ -20,9 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 RABBIT_URL = os.getenv("RABBIT_URL", "amqp://guest:guest@rabbitmq:5672/")
 EXCHANGE = os.getenv("RABBIT_EXCHANGE", "user_events")
 ROUTING_KEY = os.getenv("RABBIT_ROUTING_KEY", "user.created")
-TRAINER_ROUTING_KEY = os.getenv(
-    "RABBIT_ROUTING_KEY_TRAINER", "trainer.registered"
-)
+TRAINER_ROUTING_KEY = os.getenv("RABBIT_ROUTING_KEY_TRAINER", "trainer.registered")
 
 CONN_PARAMS = {
     "heartbeat": int(os.getenv("RABBIT_HEARTBEAT", "60")),
@@ -115,6 +113,7 @@ def _publish_with_retry(routing_key, payload, max_retries=3, base_delay=0.5):
 # USER CREATED
 # ===========================
 
+
 def publish_sync(user_id, email, max_retries=3, base_delay=0.5):
     if pika is None:
         logger.error("pika not installed, skipping publish")
@@ -155,6 +154,7 @@ def publish_user_created(user_id, email, background=True):
 # TRAINER REGISTERED
 # ===========================
 
+
 def publish_trainer_sync(user_id, email, extra=None, max_retries=3, base_delay=0.5):
     if pika is None:
         logger.error("pika missing, skipping trainer publish")
@@ -178,7 +178,9 @@ def publish_trainer_sync(user_id, email, extra=None, max_retries=3, base_delay=0
 
 def publish_trainer_registered(user_id, email, extra=None, background=True):
     if pika is None:
-        logger.error("pika not available, skipping trainer publish for user_id=%s", user_id)
+        logger.error(
+            "pika not available, skipping trainer publish for user_id=%s", user_id
+        )
         return False
 
     if background:
@@ -188,9 +190,7 @@ def publish_trainer_registered(user_id, email, extra=None, background=True):
         )
         t.daemon = True
         t.start()
-        logger.debug(
-            "Spawned background trainer publisher for user_id=%s", user_id
-        )
+        logger.debug("Spawned background trainer publisher for user_id=%s", user_id)
         return True
 
     return publish_trainer_sync(user_id, email, extra)

@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 # All factors MUST be Decimal
 INTENSITY_FACTOR = {
@@ -6,6 +6,7 @@ INTENSITY_FACTOR = {
     "medium": Decimal("0.05"),
     "high": Decimal("0.075"),
 }
+
 
 def calculate_calories(duration_sec, weight_kg, intensity):
     """

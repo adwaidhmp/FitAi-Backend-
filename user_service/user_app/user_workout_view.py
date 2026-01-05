@@ -1,14 +1,15 @@
-from rest_framework.views import APIView
+from datetime import date
+
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
-from .models import UserProfile
-from .tasks import generate_weekly_workout_task
-from .helper.week_date_helper import get_week_range
-from datetime import date
-from .models import WorkoutPlan,WorkoutLog
-from .serializers import WorkoutPlanSerializer
+from rest_framework.views import APIView
+
 from .helper.calories import calculate_calories
+from .helper.week_date_helper import get_week_range
+from .models import UserProfile, WorkoutLog, WorkoutPlan
+from .serializers import WorkoutPlanSerializer
+from .tasks import generate_weekly_workout_task
 
 
 class GenerateWorkoutView(APIView):
@@ -54,7 +55,7 @@ class GetCurrentWorkoutView(APIView):
 
         serializer = WorkoutPlanSerializer(plan)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
+
 
 class LogWorkoutExerciseView(APIView):
     permission_classes = [IsAuthenticated]

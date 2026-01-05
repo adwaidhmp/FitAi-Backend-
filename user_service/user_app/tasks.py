@@ -1,12 +1,14 @@
 # user_app/tasks.py
 from celery import shared_task
-from .models import MealLog
-from .helper.ai_client import estimate_nutrition
-from .models import TrainerBooking
 from chat.models import ChatRoom
-#----------------------------
-#nutrition task below(extra meal, custom meal)
-#----------------------------
+
+from .helper.ai_client import estimate_nutrition
+from .models import MealLog, TrainerBooking
+
+
+# ----------------------------
+# nutrition task below(extra meal, custom meal)
+# ----------------------------
 @shared_task(
     bind=True,
     autoretry_for=(Exception,),
@@ -30,26 +32,25 @@ def estimate_nutrition_task(self, meal_log_id):
     meal.save()
 
 
+# ----------------------------
+# workout task below
+# ----------------------------
 
-#----------------------------
-#workout task below
-#----------------------------
 
-
+import sys
 from datetime import date
 from decimal import Decimal
-import sys
 
 from celery import shared_task
 from django.db import transaction
 from requests.exceptions import ConnectionError, Timeout
 
-from .models import UserProfile, WorkoutPlan
-from .helper.week_date_helper import get_week_range
 from .helper.ai_client_workout import request_ai_workout
 from .helper.ai_payload import build_workout_ai_payload
 from .helper.calories import calculate_calories
+from .helper.week_date_helper import get_week_range
 from .helper.workout_validators import validate_ai_workout
+from .models import UserProfile, WorkoutPlan
 
 
 def normalize_durations(exercises, min_minutes, max_minutes):
@@ -151,29 +152,42 @@ def handle_booking_decision(self, payload):
     if payload.get("event") != "BOOKING_DECIDED":
         return
 
-    booking = TrainerBooking.objects.filter(
-        id=payload["booking_id"],
-        trainer_user_id=payload["trainer_user_id"],
-        status=TrainerBooking.STATUS_PENDING,
-    ).first()
-
-    if not booking:
-        return
-
+    booking_id = payload.get("booking_id")
+    trainer_user_id = payload.get("trainer_user_id")
+    user_id = payload.get("user_id")
     action = payload.get("action", "").lower()
-    print("ACTION:", action)
 
-    if action == "approve":
-        booking.status = TrainerBooking.STATUS_APPROVED
-        booking.save(update_fields=["status"])
+    if not booking_id or not trainer_user_id or not user_id:
+        raise ValueError("Invalid booking decision payload")
 
-        room, created = ChatRoom.objects.get_or_create(
-            user_id=booking.user_id,
-            trainer_user_id=booking.trainer_user_id,
+    with transaction.atomic():
+        booking = (
+            TrainerBooking.objects
+            .select_for_update()
+            .filter(
+                id=booking_id,
+                trainer_user_id=trainer_user_id,
+            )
+            .first()
         )
 
-        print("ChatRoom created:", created, "room_id:", room.id)
+        if not booking:
+            return
 
-    else:
-        booking.status = TrainerBooking.STATUS_REJECTED
-        booking.save(update_fields=["status"])
+        # ✅ Idempotency guard
+        if booking.status != TrainerBooking.STATUS_PENDING:
+            return
+
+        if action == "approve":
+            booking.status = TrainerBooking.STATUS_APPROVED
+            booking.save(update_fields=["status"])
+
+            ChatRoom.objects.get_or_create(
+                user_id=user_id,
+                trainer_user_id=trainer_user_id,
+                defaults={"is_active": True},
+            )
+
+        elif action == "reject":
+            booking.status = TrainerBooking.STATUS_REJECTED
+            booking.save(update_fields=["status"])

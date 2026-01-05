@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from .models import TrainerBooking, UserProfile
 from .permissions import IsTrainer
-
+from django.shortcuts import get_object_or_404
 
 class ApprovedTrainerListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -74,7 +74,7 @@ class ApprovedTrainerListView(APIView):
         return Response(result)
 
 
-#internal use for trainer to see pending clients    
+# internal use for trainer to see pending clients
 class PendingClientsTrainer(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -112,7 +112,7 @@ class PendingClientsTrainer(APIView):
         return Response(data, status=200)
 
 
-#internal use for trainer to see approved users
+# internal use for trainer to see approved users
 class ApprovedUsersForTrainerView(APIView):
     permission_classes = [IsAuthenticated, IsTrainer]
 
@@ -132,3 +132,24 @@ class ApprovedUsersForTrainerView(APIView):
         ]
 
         return Response(data, status=200)
+    
+
+class BookingDetailView(APIView):
+    permission_classes = [IsAuthenticated,IsTrainer]
+
+    def get(self, request, booking_id):
+        booking = get_object_or_404(
+            TrainerBooking,
+            id=booking_id,
+        )
+
+        return Response(
+            {
+                "booking_id": str(booking.id),
+                "user_id": str(booking.user_id),
+                "trainer_user_id": str(booking.trainer_user_id),
+                "status": booking.status,
+                "created_at": booking.created_at,
+            },
+            status=200,
+        )

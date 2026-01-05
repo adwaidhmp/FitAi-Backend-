@@ -1,18 +1,13 @@
-from datetime import date, timedelta
 from calendar import monthrange
-from django.db.models import Sum
+from datetime import date, timedelta
 
-from user_app.models import (
-    MealLog,
-    WorkoutLog,
-    DietPlan,
-    WorkoutPlan,
-    WeightLog,
-)
+from django.db.models import Sum
+from user_app.models import DietPlan, MealLog, WeightLog, WorkoutLog, WorkoutPlan
 
 # =====================================================
 # CORE UTILITIES
 # =====================================================
+
 
 def _daterange(start, end):
     for i in range((end - start).days + 1):
@@ -61,6 +56,7 @@ def _skipped_meals(user_id, start, end):
 # WEIGHT HELPERS (WEEKLY AUTHORITATIVE)
 # =====================================================
 
+
 def _weekly_weight_change(user_id, week_start, week_end):
     prev_log = (
         WeightLog.objects.filter(
@@ -94,6 +90,7 @@ def _weekly_weight_change(user_id, week_start, week_end):
 # =====================================================
 # REASON LOGIC (HONEST + DATA BACKED)
 # =====================================================
+
 
 def _diet_reason(actual, target, skipped):
     if target is None:
@@ -147,6 +144,7 @@ def _weekly_weight_reason(delta, net_calories):
 # DAILY PROGRESS
 # =====================================================
 
+
 def daily_progress(user_id, day: date):
     meals = _meal_aggregate(user_id, day, day)
     burn = _workout_calories(user_id, day, day)
@@ -183,6 +181,7 @@ def daily_progress(user_id, day: date):
 # WEEKLY PROGRESS (WEIGHT ANALYSIS HERE)
 # =====================================================
 
+
 def weekly_progress(user_id, week_start: date):
     week_end = week_start + timedelta(days=6)
 
@@ -196,9 +195,7 @@ def weekly_progress(user_id, week_start: date):
     expected_intake = diet.daily_calories * 7 if diet else None
     expected_burn = workout.estimated_weekly_calories if workout else None
 
-    prev_wt, curr_wt, delta = _weekly_weight_change(
-        user_id, week_start, week_end
-    )
+    prev_wt, curr_wt, delta = _weekly_weight_change(user_id, week_start, week_end)
 
     net = meals["calories"] - burn
 
@@ -232,6 +229,7 @@ def weekly_progress(user_id, week_start: date):
 # =====================================================
 # MONTHLY PROGRESS (SUMMARY)
 # =====================================================
+
 
 def monthly_progress(user_id, year: int, month: int):
     start = date(year, month, 1)

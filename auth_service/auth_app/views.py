@@ -10,18 +10,29 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
-from .serializers import (ForgotPasswordConfirmSerializer,
-                          ForgotPasswordRequestSerializer, LoginSerializer,
-                          ProfileSerializer, ProfileUpdateSerializer,
-                          RegisterWithOtpSerializer, RequestOtpSerializer,
-                          TrainerProfileSerializer)
+from .serializers import (
+    ForgotPasswordConfirmSerializer,
+    ForgotPasswordRequestSerializer,
+    LoginSerializer,
+    ProfileSerializer,
+    ProfileUpdateSerializer,
+    RegisterWithOtpSerializer,
+    RequestOtpSerializer,
+    TrainerProfileSerializer,
+)
 from .tasks import send_otp_email_task
 from .tokens import get_token_pair
-from .utils.otp import (can_request_otp, delete_otp, generate_otp,
-                        get_failed_attempts, record_failed_attempt,
-                        reset_failed_attempts, store_otp, verify_otp)
-from .utils.rabbit_producer import (publish_trainer_registered,
-                                    publish_user_created)
+from .utils.otp import (
+    can_request_otp,
+    delete_otp,
+    generate_otp,
+    get_failed_attempts,
+    record_failed_attempt,
+    reset_failed_attempts,
+    store_otp,
+    verify_otp,
+)
+from .utils.rabbit_producer import publish_trainer_registered, publish_user_created
 
 
 class RequestOtpView(APIView):

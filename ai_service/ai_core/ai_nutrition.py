@@ -1,10 +1,10 @@
-import logging
 import json
-from openai import OpenAI
+import logging
+
 from django.conf import settings
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
-
 
 
 def get_client():

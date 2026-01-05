@@ -2,12 +2,24 @@ from django.urls import path
 
 from .admin_trainer_views import AdminApproveTrainerView, AdminTrainerListView
 from .admin_user_views import AdminUserListView, AdminUserStatusView
-from .user_trainer_views import (ApprovedTrainerListView, BulkUserInfoView,
-                                 UsersByIdsView)
-from .views import (ForgotPasswordConfirmView, ForgotPasswordRequestView,
-                    GoogleLoginView, LoginView, LogoutView, ProfileEditView,
-                    ProfileView, RequestOtpView, TrainerProfileView,
-                    TrainerRegisterView, UserRegisterView)
+from .user_trainer_views import (
+    ApprovedTrainerListView,
+    BulkUserInfoView,
+    UsersByIdsView,
+)
+from .views import (
+    ForgotPasswordConfirmView,
+    ForgotPasswordRequestView,
+    GoogleLoginView,
+    LoginView,
+    LogoutView,
+    ProfileEditView,
+    ProfileView,
+    RequestOtpView,
+    TrainerProfileView,
+    TrainerRegisterView,
+    UserRegisterView,
+)
 
 urlpatterns = [
     path("request-otp/", RequestOtpView.as_view(), name="request-otp"),

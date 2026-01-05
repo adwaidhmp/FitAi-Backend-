@@ -1,6 +1,8 @@
 # user_app/views.py
 import requests
+from chat.models import ChatRoom
 from django.conf import settings
+from django.db import transaction
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -146,10 +148,14 @@ class RemoveTrainerView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def delete(self, request):
-        booking = TrainerBooking.objects.filter(
-            user_id=request.user.id,
-            status__in=["pending", "approved"],
-        ).first()
+        booking = (
+            TrainerBooking.objects.filter(
+                user_id=request.user.id,
+                status__in=["pending", "approved"],
+            )
+            .select_for_update()
+            .first()
+        )
 
         if not booking:
             return Response(
@@ -157,12 +163,19 @@ class RemoveTrainerView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        booking.status = TrainerBooking.STATUS_CANCELLED
-        booking.save()
+        trainer_user_id = booking.trainer_user_id
+
+        with transaction.atomic():
+            booking.status = TrainerBooking.STATUS_CANCELLED
+            booking.save(update_fields=["status"])
+
+            ChatRoom.objects.filter(
+                user_id=request.user.id,
+                trainer_user_id=trainer_user_id,
+                is_active=True,
+            ).update(is_active=False)
 
         return Response(
             {"detail": "Trainer removed"},
             status=status.HTTP_200_OK,
         )
-
-
