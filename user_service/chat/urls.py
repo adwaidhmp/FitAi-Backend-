@@ -1,6 +1,6 @@
 from chat.views import (
     ChatHistoryView,
-    SendMessageView,
+    SendMediaMessageView,
     SendTextMessageView,
     UserChatRoomListView,
 )
@@ -12,7 +12,7 @@ urlpatterns = [
     path("rooms/", UserChatRoomListView.as_view()),
     path("rooms/<uuid:room_id>/messages/", ChatHistoryView.as_view()),
     path("send/text/", SendTextMessageView.as_view()),
-    path("send/media/", SendMessageView.as_view()),
+    path("send/media/", SendMediaMessageView.as_view()),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

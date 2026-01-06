@@ -8,6 +8,12 @@ from .views import (
     PendingClientsView,
     TrainerProfileView,
 )
+from .trainer_user_chat_view import(
+    TrainerChatRoomListProxyView,
+    TrainerChatHistoryProxyView,
+    TrainerSendTextMessageProxyView,
+    TrainerSendMediaProxyView,
+)
 
 urlpatterns = [
     path("profile/", TrainerProfileView.as_view(), name="trainer-profile"),
@@ -33,6 +39,12 @@ urlpatterns = [
         "approved-users/",
         ApprovedUsersView.as_view(),
     ),
+
+    #chat service urls
+    path("chat/rooms/", TrainerChatRoomListProxyView.as_view()),
+    path("chat/rooms/<uuid:room_id>/messages/", TrainerChatHistoryProxyView.as_view()),
+    path("chat/send/text/", TrainerSendTextMessageProxyView.as_view()),
+    path("chat/send/media/", TrainerSendMediaProxyView.as_view()),
 ]
 
-print("hai")
+

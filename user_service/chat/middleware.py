@@ -5,7 +5,7 @@ from django.conf import settings
 from channels.db import database_sync_to_async
 from rest_framework_simplejwt.backends import TokenBackend
 from rest_framework_simplejwt.exceptions import TokenError
-
+import uuid
 
 class JWTAuthMiddleware:
     """
@@ -50,7 +50,7 @@ class JWTAuthMiddleware:
                 role = roles[0]
 
             user = SimpleNamespace(
-                id=user_id,
+                id=uuid.UUID(user_id),
                 role=role,
                 token_payload=payload,
             )

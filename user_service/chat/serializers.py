@@ -33,6 +33,8 @@ class UserMessageCreateSerializer(serializers.Serializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    file = serializers.SerializerMethodField()
+
     class Meta:
         model = Message
         fields = [
@@ -47,3 +49,11 @@ class MessageSerializer(serializers.ModelSerializer):
             "read_at",
             "created_at",
         ]
+
+    def get_file(self, obj):
+        if not obj.file:
+            return None
+
+        request = self.context.get("request")
+        return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+

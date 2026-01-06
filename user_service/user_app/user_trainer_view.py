@@ -25,7 +25,7 @@ class ApprovedTrainerListView(APIView):
         auth_resp = requests.get(
             f"{settings.AUTH_SERVICE_URL}/api/v1/auth/internal/trainers/approved/",
             headers=headers,
-            timeout=5,
+            timeout=10,
         )
 
         if not auth_resp.ok:

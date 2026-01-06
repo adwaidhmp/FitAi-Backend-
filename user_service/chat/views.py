@@ -12,7 +12,7 @@ from chat.ws_notify import notify_new_message
 import uuid 
 from .helper.message_normalizer import normalize_for_ws
 from django.db.models import Q
-
+from django.db import transaction
 # -------------------------------------------------
 # USER CHAT ROOM LIST (with has_unread)
 # -------------------------------------------------
@@ -40,6 +40,7 @@ class UserChatRoomListView(APIView):
             data.append(
                 {
                     "id": room.id,
+                    "user_id": room.user_id,
                     "trainer_user_id": room.trainer_user_id,
                     "last_message_at": room.last_message_at,
                     "created_at": room.created_at,
@@ -81,8 +82,7 @@ class ChatHistoryView(ListAPIView):
         return Message.objects.filter(
             room=room,
             is_deleted=False,
-        ).order_by("-created_at")
-
+        ).order_by("created_at")
 
 
 # -------------------------------------------------
@@ -110,7 +110,7 @@ class SendTextMessageView(APIView):
         room = get_object_or_404(ChatRoom, id=room_id, is_active=True)
 
         try:
-            user_uuid = uuid.UUID(request.user.id)
+            user_uuid = uuid.UUID(str(request.user.id))
         except ValueError:
             return Response(
                 {"detail": "Invalid user id in token"},
@@ -123,10 +123,15 @@ class SendTextMessageView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # ✅ CREATE ORM MESSAGE
         msg = Message.objects.create(
             room=room,
             sender_user_id=user_uuid,
-            sender_role=Message.SENDER_USER,
+            sender_role=(
+                Message.SENDER_USER
+                if user_uuid == room.user_id
+                else Message.SENDER_TRAINER
+            ),
             type=Message.TEXT,
             text=text,
         )
@@ -134,20 +139,21 @@ class SendTextMessageView(APIView):
         room.last_message_at = msg.created_at
         room.save(update_fields=["last_message_at"])
 
-        data = MessageSerializer(msg).data
+        # ✅ SEND ORM INSTANCE TO WS
+        notify_new_message(room.id, msg)
 
-        # 🔥 normalize ONLY for WS
-        ws_payload = normalize_for_ws(data)
-        notify_new_message(room.id, ws_payload)
-
-        return Response(data, status=status.HTTP_201_CREATED)
+        # ✅ HTTP RESPONSE IS SERIALIZED
+        return Response(
+            MessageSerializer(msg).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 
 # -------------------------------------------------
 # SEND MEDIA / UNIFIED MESSAGE ENDPOINT
 # -------------------------------------------------
-class SendMessageView(APIView):
+class SendMediaMessageView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -160,16 +166,32 @@ class SendMessageView(APIView):
             is_active=True,
         )
 
-        if request.user.id not in (room.user_id, room.trainer_user_id):
-            return Response({"detail": "Forbidden"}, status=403)
+        try:
+            user_uuid = uuid.UUID(str(request.user.id))
+        except ValueError:
+            return Response(
+                {"detail": "Invalid user id in token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if user_uuid not in (room.user_id, room.trainer_user_id):
+            return Response(
+                {"detail": "Forbidden"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         file = serializer.validated_data.get("file")
+        msg_type = serializer.validated_data["type"]
 
         msg = Message.objects.create(
             room=room,
-            sender_user_id=request.user.id,
-            sender_role=Message.SENDER_USER,
-            type=serializer.validated_data["type"],
+            sender_user_id=user_uuid,
+            sender_role=(
+                Message.SENDER_USER
+                if user_uuid == room.user_id
+                else Message.SENDER_TRAINER
+            ),
+            type=msg_type,
             text=serializer.validated_data.get("text", ""),
             file=file,
             duration_sec=serializer.validated_data.get("duration_sec"),
@@ -180,8 +202,12 @@ class SendMessageView(APIView):
         room.last_message_at = msg.created_at
         room.save(update_fields=["last_message_at"])
 
-        notify_new_message(room.id, msg)
+        # ✅ CRITICAL FIX: notify AFTER commit, send ORM instance
+        transaction.on_commit(
+            lambda: notify_new_message(room.id, msg)
+        )
 
+        # ✅ HTTP response is serialized normally
         return Response(
             MessageSerializer(msg).data,
             status=status.HTTP_201_CREATED,

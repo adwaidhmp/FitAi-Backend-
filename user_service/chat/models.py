@@ -32,11 +32,13 @@ class Message(models.Model):
     TEXT = "text"
     IMAGE = "image"
     AUDIO = "audio"
+    VIDEO ="video"
 
     TYPE_CHOICES = [
         (TEXT, "Text"),
         (IMAGE, "Image"),
         (AUDIO, "Audio"),
+        (VIDEO, "Video"),
     ]
 
     SENDER_USER = "user"

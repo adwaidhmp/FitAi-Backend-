@@ -8,7 +8,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_id = self.scope["url_route"]["kwargs"]["room_id"]
         self.group_name = f"chat_{self.room_id}"
-        user = self.scope["user"]
+        user = self.scope.get("user")
 
         if not user or not user.is_authenticated:
             await self.close()
@@ -29,10 +29,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def chat_message(self, event):
         await self.send(
-            text_data=json.dumps({
-                "type": "message",
-                "payload": event["payload"],
-            })
+            text_data=json.dumps(
+                {
+                    "type": "message",
+                    "payload": event["payload"],
+                }
+            )
         )
 
     @database_sync_to_async
