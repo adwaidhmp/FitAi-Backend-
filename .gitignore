@@ -17,6 +17,7 @@ venv/
 
 # Django
 trainer_service/trainer_certificates/
+user_service/chat_media/
 
 # OS
 .DS_Store
