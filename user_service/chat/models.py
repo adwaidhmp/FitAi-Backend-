@@ -27,6 +27,18 @@ class ChatRoom(models.Model):
     def __str__(self):
         return f"ChatRoom({self.user_id} ↔ {self.trainer_user_id})"
 
+    def other_participant_id(self, current_user_id):
+        """
+        Return the other participant's user_id in this chat room.
+        """
+        if str(current_user_id) == str(self.user_id):
+            return self.trainer_user_id
+
+        if str(current_user_id) == str(self.trainer_user_id):
+            return self.user_id
+
+        raise ValueError("User is not a participant of this room")
+
 
 class Message(models.Model):
     TEXT = "text"
@@ -96,3 +108,39 @@ class Message(models.Model):
 
     def __str__(self):
         return f"Message({self.type}) in {self.room_id}"
+
+
+
+class Call(models.Model):
+    STATUS_RINGING = "ringing"
+    STATUS_ACTIVE = "active"
+    STATUS_ENDED = "ended"
+
+    STATUS_CHOICES = [
+        (STATUS_RINGING, "Ringing"),
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_ENDED, "Ended"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    room = models.ForeignKey(
+        "chat.ChatRoom",
+        on_delete=models.CASCADE,
+        related_name="calls",
+    )
+
+    started_by = models.UUIDField()  # user_id or trainer_user_id
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_RINGING,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["room", "status"]),
+        ]

@@ -1,18 +1,13 @@
 from types import SimpleNamespace
 from urllib.parse import parse_qs
-
 from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
 from channels.db import database_sync_to_async
 from rest_framework_simplejwt.backends import TokenBackend
 from rest_framework_simplejwt.exceptions import TokenError
 import uuid
 
 class JWTAuthMiddleware:
-    """
-    WebSocket JWT authentication middleware.
-    Uses SAME logic as SimpleJWTAuth (stateless, no DB lookup).
-    """
-
     def __init__(self, inner):
         self.inner = inner
         self.backend = TokenBackend(
@@ -21,15 +16,14 @@ class JWTAuthMiddleware:
         )
 
     async def __call__(self, scope, receive, send):
-        scope["user"] = None
+        scope["user"] = AnonymousUser()
 
         query_string = scope.get("query_string", b"").decode()
         params = parse_qs(query_string)
         token_list = params.get("token")
 
         if token_list:
-            token = token_list[0]
-            user = await self._get_user_from_token(token)
+            user = await self._get_user_from_token(token_list[0])
             if user:
                 scope["user"] = user
 
@@ -40,8 +34,13 @@ class JWTAuthMiddleware:
         try:
             payload = self.backend.decode(token, verify=True)
 
-            user_id = payload.get("sub") or payload.get("user_id") or payload.get("id")
-            if not user_id:
+            raw_user_id = payload.get("sub") or payload.get("user_id") or payload.get("id")
+            if not raw_user_id:
+                return None
+
+            try:
+                user_id = uuid.UUID(str(raw_user_id))
+            except Exception:
                 return None
 
             role = payload.get("role")
@@ -50,7 +49,7 @@ class JWTAuthMiddleware:
                 role = roles[0]
 
             user = SimpleNamespace(
-                id=uuid.UUID(user_id),
+                id=user_id,
                 role=role,
                 token_payload=payload,
             )
