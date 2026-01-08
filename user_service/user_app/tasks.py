@@ -191,3 +191,35 @@ def handle_booking_decision(self, payload):
         elif action == "reject":
             booking.status = TrainerBooking.STATUS_REJECTED
             booking.save(update_fields=["status"])
+
+
+
+from .helper.ai_client import generate_diet_plan, AIServiceError
+from .helper.ai_payload import build_payload_from_profile
+from .models import DietPlan, UserProfile
+
+
+@shared_task(
+    bind=True,
+    autoretry_for=(AIServiceError, Exception),
+    retry_backoff=10,
+    retry_kwargs={"max_retries": 3},
+)
+def generate_diet_plan_task(self, plan_id):
+    plan = DietPlan.objects.select_for_update().get(id=plan_id)
+
+    # Idempotency guard
+    if plan.status != "pending":
+        return
+
+    profile = UserProfile.objects.get(user_id=plan.user_id)
+    payload = build_payload_from_profile(profile)
+
+    ai_response = generate_diet_plan(payload)
+
+    plan.daily_calories = ai_response["daily_calories"]
+    plan.macros = ai_response["macros"]
+    plan.meals = ai_response["meals"]
+    plan.version = ai_response.get("version", "diet_v1")
+    plan.status = "ready"
+    plan.save()

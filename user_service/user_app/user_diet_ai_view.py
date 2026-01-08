@@ -11,11 +11,10 @@ from .helper.ai_client import estimate_nutrition, generate_diet_plan
 from .helper.ai_payload import build_payload_from_profile
 from .helper.meals import meal_already_logged
 from .models import DietPlan, MealLog, UserProfile, WeightLog
-from .tasks import estimate_nutrition_task
+from .tasks import estimate_nutrition_task, generate_diet_plan_task
 
 
-def get_week_start():
-    today = now().date()
+def get_week_start(today):
     return today - timedelta(days=today.weekday())
 
 
@@ -23,48 +22,38 @@ class GenerateDietPlanView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        today = now().date()
+
         # 1️⃣ Load profile
         profile = UserProfile.objects.filter(user_id=request.user.id).first()
-
         if not profile:
             return Response(
                 {"detail": "Profile not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        today = now().date()
-
-        # 2️⃣ Block if active plan already exists
-        active_plan = DietPlan.objects.filter(
-            user_id=request.user.id,
-            week_start__lte=today,
-            week_end__gte=today,
-        ).first()
-
-        if active_plan:
+        # 2️⃣ Block regeneration
+        if DietPlan.objects.filter(user_id=request.user.id).exists():
             return Response(
                 {
-                    "has_plan": True,
-                    "detail": "You already have an active diet plan",
-                    "daily_calories": active_plan.daily_calories,
-                    "macros": active_plan.macros,
-                    "meals": active_plan.meals,
-                    "version": active_plan.version,
+                    "detail": (
+                        "Diet plans are generated automatically after "
+                        "weekly weight updates."
+                    )
                 },
-                status=status.HTTP_200_OK,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # 3️⃣ Stop if target already achieved
-        if profile.goal == "cutting" and profile.weight_kg <= profile.target_weight_kg:
-            return Response(
-                {
-                    "status": "completed",
-                    "detail": "Target weight achieved. Diet plan generation stopped.",
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        if profile.goal == "bulking" and profile.weight_kg >= profile.target_weight_kg:
+        # 3️⃣ Stop if target achieved
+        if (
+            profile.goal == "cutting"
+            and profile.target_weight_kg
+            and profile.weight_kg <= profile.target_weight_kg
+        ) or (
+            profile.goal == "bulking"
+            and profile.target_weight_kg
+            and profile.weight_kg >= profile.target_weight_kg
+        ):
             return Response(
                 {
                     "status": "completed",
@@ -73,45 +62,29 @@ class GenerateDietPlanView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        # 4️⃣ Create new week window
-        week_start = get_week_start()
+        # 4️⃣ Create week window
+        week_start = get_week_start(today)
         week_end = week_start + timedelta(days=6)
 
-        # 5️⃣ Build AI payload
-        payload = build_payload_from_profile(profile)
+        # 5️⃣ Create placeholder plan
+        plan = DietPlan.objects.create(
+            user_id=request.user.id,
+            week_start=week_start,
+            week_end=week_end,
+            status="pending",
+        )
 
-        # 6️⃣ Call AI
-        try:
-            ai_response = generate_diet_plan(payload)
-        except AIServiceError:
-            return Response(
-                {"detail": "AI service unavailable"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        # 6️⃣ Enqueue async generation
+        generate_diet_plan_task.delay(plan.id)
 
-        # 7️⃣ Save plan
-        with transaction.atomic():
-            plan = DietPlan.objects.create(
-                user_id=request.user.id,
-                week_start=week_start,
-                week_end=week_end,
-                daily_calories=ai_response["daily_calories"],
-                macros=ai_response["macros"],
-                meals=ai_response["meals"],
-                version=ai_response.get("version", "diet_v1"),
-            )
-
-        # 8️⃣ Response
+        # 7️⃣ Immediate response
         return Response(
             {
-                "has_plan": True,
-                "detail": "New diet plan generated",
-                "daily_calories": plan.daily_calories,
-                "macros": plan.macros,
-                "meals": plan.meals,
-                "version": plan.version,
+                "has_plan": False,
+                "status": "processing",
+                "detail": "Diet plan is being generated",
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_202_ACCEPTED,
         )
 
 
@@ -119,26 +92,40 @@ class CurrentDietPlanView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        week_start = get_week_start()
+        today = now().date()
 
+        # 🔥 FIX 1: fetch ACTIVE plan, not exact week_start
         plan = DietPlan.objects.filter(
             user_id=request.user.id,
-            week_start=week_start,
+            week_start__lte=today,
+            week_end__gte=today,
         ).first()
 
+        # 🔥 FIX 2: ALWAYS return full flag set
         if not plan:
             return Response(
-                {"has_plan": False},
+                {
+                    "has_plan": False,
+                    "can_generate": True,
+                    "can_update_weight": False,
+                },
                 status=status.HTTP_200_OK,
             )
+
+        can_update_weight = today > plan.week_end
 
         return Response(
             {
                 "has_plan": True,
+                "status": plan.status,
                 "daily_calories": plan.daily_calories,
                 "macros": plan.macros,
                 "meals": plan.meals,
                 "version": plan.version,
+                "week_start": plan.week_start,
+                "week_end": plan.week_end,
+                "can_generate": False,
+                "can_update_weight": can_update_weight,
             },
             status=status.HTTP_200_OK,
         )
@@ -361,7 +348,7 @@ class UpdateWeightView(APIView):
         # ---------------------------
         # 4️⃣ Enforce FULL WEEK completion
         # ---------------------------
-        if today < current_plan.week_end:
+        if today <= current_plan.week_end:
             return Response(
                 {
                     "detail": (
@@ -388,46 +375,65 @@ class UpdateWeightView(APIView):
             )
 
         # ---------------------------
-        # 6️⃣ Generate next plan window
-        # ---------------------------
-        new_week_start = today + timedelta(days=1)
-        new_week_end = new_week_start + timedelta(days=6)
-
-        # ---------------------------
-        # 7️⃣ Atomic update + regeneration
+        # 6️⃣ Update profile + log weight
         # ---------------------------
         with transaction.atomic():
-            # update profile weight
             profile.weight_kg = weight
             profile.save(update_fields=["weight_kg"])
 
-            # log weight
             WeightLog.objects.create(
                 user_id=request.user.id,
                 weight_kg=weight,
                 logged_at=today,
             )
 
-            # generate new plan
-            payload = build_payload_from_profile(profile)
-
-            try:
-                ai_response = generate_diet_plan(payload)
-            except AIServiceError:
-                raise  # rollback transaction
-
-            new_plan = DietPlan.objects.create(
-                user_id=request.user.id,
-                week_start=new_week_start,
-                week_end=new_week_end,
-                daily_calories=ai_response["daily_calories"],
-                macros=ai_response["macros"],
-                meals=ai_response["meals"],
-                version=ai_response.get("version", "diet_v1"),
+        # ---------------------------
+        # 7️⃣ Stop if target achieved
+        # ---------------------------
+        if (
+            profile.goal == "cutting"
+            and profile.target_weight_kg
+            and weight <= profile.target_weight_kg
+        ) or (
+            profile.goal == "bulking"
+            and profile.target_weight_kg
+            and weight >= profile.target_weight_kg
+        ):
+            return Response(
+                {
+                    "detail": "Target weight achieved. Diet plan generation stopped."
+                },
+                status=status.HTTP_200_OK,
             )
 
         # ---------------------------
-        # 8️⃣ Return response
+        # 8️⃣ Generate new diet plan (next week)
+        # ---------------------------
+        week_start = get_week_start(today + timedelta(days=7))
+        week_end = week_start + timedelta(days=6)
+
+        payload = build_payload_from_profile(profile)
+
+        try:
+            ai_response = generate_diet_plan(payload)
+        except AIServiceError:
+            return Response(
+                {"detail": "AI service unavailable. Try again later."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        new_plan = DietPlan.objects.create(
+            user_id=request.user.id,
+            week_start=week_start,
+            week_end=week_end,
+            daily_calories=ai_response["daily_calories"],
+            macros=ai_response["macros"],
+            meals=ai_response["meals"],
+            version=ai_response.get("version", "diet_v1"),
+        )
+
+        # ---------------------------
+        # 9️⃣ Response
         # ---------------------------
         return Response(
             {
@@ -436,8 +442,6 @@ class UpdateWeightView(APIView):
                     "week_start": new_plan.week_start,
                     "week_end": new_plan.week_end,
                     "daily_calories": new_plan.daily_calories,
-                    "macros": new_plan.macros,
-                    "meals": new_plan.meals,
                 },
             },
             status=status.HTTP_200_OK,

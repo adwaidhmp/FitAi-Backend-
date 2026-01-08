@@ -35,6 +35,8 @@ from .views import (
     UserProfileView,
 )
 
+from .trainer_userdata_view import TrainerUserOverviewView
+
 urlpatterns = [
     path("profile/", UserProfileView.as_view(), name="user-profile"),
     path("choices/", ProfileChoicesView.as_view(), name="profile-choices"),
@@ -71,4 +73,12 @@ urlpatterns = [
     path("workout/current/", GetCurrentWorkoutView.as_view()),
     path("workout/log/", LogWorkoutExerciseView.as_view()),
     path("workout/logs/today/", GetTodayWorkoutLogsView.as_view()),
+
+    # trainer user data overview for trainers
+
+    path(
+        "trainer/users/<uuid:user_id>/overview/",
+        TrainerUserOverviewView.as_view(),
+        name="trainer-user-overview",
+    ),
 ]

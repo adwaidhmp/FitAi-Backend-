@@ -152,11 +152,25 @@ class TrainerBooking(models.Model):
 class DietPlan(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField()
+
     week_start = models.DateField()
     week_end = models.DateField()
-    daily_calories = models.IntegerField()
-    macros = models.JSONField()
-    meals = models.JSONField()
+
+    # ⬇️ Filled asynchronously
+    daily_calories = models.IntegerField(null=True, blank=True)
+    macros = models.JSONField(null=True, blank=True)
+    meals = models.JSONField(null=True, blank=True)
+
+    # ⬇️ Async state
+    status = models.CharField(
+        max_length=10,
+        choices=(
+            ("pending", "Pending"),
+            ("ready", "Ready"),
+            ("failed", "Failed"),
+        ),
+        default="pending",
+    )
 
     version = models.CharField(max_length=20, default="diet_v1")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -164,7 +178,8 @@ class DietPlan(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["user_id", "week_start"], name="unique_user_week_plan"
+                fields=["user_id", "week_start"],
+                name="unique_user_week_plan",
             )
         ]
 

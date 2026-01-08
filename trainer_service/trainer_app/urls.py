@@ -21,6 +21,8 @@ from .trainer_user_call_view import(
     TrainerEndCallView,
     )
 
+from .ueserdata_trainer_view import TrainerUserOverviewProxyView    
+
 urlpatterns = [
     path("profile/", TrainerProfileView.as_view(), name="trainer-profile"),
     # service url for admin
@@ -70,6 +72,14 @@ urlpatterns = [
         TrainerEndCallView.as_view(),
         name="trainer-end-call",
     ),
-]
+
+    #user data over view proxy
+    
+    path(
+        "users/<uuid:user_id>/overview/",
+        TrainerUserOverviewProxyView.as_view(),
+        name="trainer-user-overview-proxy",
+    ),
+    ]
 
 
