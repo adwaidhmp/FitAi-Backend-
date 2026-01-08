@@ -15,6 +15,12 @@ from .trainer_user_chat_view import(
     TrainerSendMediaProxyView,
 )
 
+from .trainer_user_call_view import(
+    TrainerStartCallView,
+    TrainerAcceptCallView,
+    TrainerEndCallView,
+    )
+
 urlpatterns = [
     path("profile/", TrainerProfileView.as_view(), name="trainer-profile"),
     # service url for admin
@@ -45,6 +51,25 @@ urlpatterns = [
     path("chat/rooms/<uuid:room_id>/messages/", TrainerChatHistoryProxyView.as_view()),
     path("chat/send/text/", TrainerSendTextMessageProxyView.as_view()),
     path("chat/send/media/", TrainerSendMediaProxyView.as_view()),
+
+    #call service urls
+    path(
+        "calls/start/<uuid:room_id>/",
+        TrainerStartCallView.as_view(),
+        name="trainer-start-call",
+    ),
+
+    path(
+        "calls/<uuid:call_id>/accept/",
+        TrainerAcceptCallView.as_view(),
+        name="trainer-accept-call",
+    ),
+
+    path(
+        "calls/<uuid:call_id>/end/",
+        TrainerEndCallView.as_view(),
+        name="trainer-end-call",
+    ),
 ]
 
 
