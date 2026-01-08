@@ -94,15 +94,38 @@ class CurrentDietPlanView(APIView):
     def get(self, request):
         today = now().date()
 
-        # 🔥 FIX 1: fetch ACTIVE plan, not exact week_start
+        # 1️⃣ Try ACTIVE plan
         plan = DietPlan.objects.filter(
             user_id=request.user.id,
             week_start__lte=today,
             week_end__gte=today,
         ).first()
 
-        # 🔥 FIX 2: ALWAYS return full flag set
-        if not plan:
+        # 2️⃣ If active plan exists
+        if plan:
+            return Response(
+                {
+                    "has_plan": True,
+                    "status": plan.status,
+                    "daily_calories": plan.daily_calories,
+                    "macros": plan.macros,
+                    "meals": plan.meals,
+                    "version": plan.version,
+                    "week_start": plan.week_start,
+                    "week_end": plan.week_end,
+                    "can_generate": False,
+                    "can_update_weight": False,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # 3️⃣ No active plan → check if user EVER had a plan
+        has_any_plan = DietPlan.objects.filter(
+            user_id=request.user.id
+        ).exists()
+
+        # 🆕 Brand-new user → allow manual generation
+        if not has_any_plan:
             return Response(
                 {
                     "has_plan": False,
@@ -112,20 +135,12 @@ class CurrentDietPlanView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        can_update_weight = today > plan.week_end
-
+        # 🔁 Existing user → must update weight
         return Response(
             {
-                "has_plan": True,
-                "status": plan.status,
-                "daily_calories": plan.daily_calories,
-                "macros": plan.macros,
-                "meals": plan.meals,
-                "version": plan.version,
-                "week_start": plan.week_start,
-                "week_end": plan.week_end,
+                "has_plan": False,
                 "can_generate": False,
-                "can_update_weight": can_update_weight,
+                "can_update_weight": True,
             },
             status=status.HTTP_200_OK,
         )
@@ -194,6 +209,7 @@ class FollowMealFromPlanView(APIView):
             {"detail": f"{meal_type} logged from plan"},
             status=status.HTTP_200_OK,
         )
+
 
 
 class LogCustomMealWithAIView(APIView):
@@ -323,7 +339,6 @@ class UpdateWeightView(APIView):
         # 2️⃣ Load profile
         # ---------------------------
         profile = UserProfile.objects.filter(user_id=request.user.id).first()
-
         if not profile:
             return Response(
                 {"detail": "Profile not found"},
@@ -331,36 +346,30 @@ class UpdateWeightView(APIView):
             )
 
         # ---------------------------
-        # 3️⃣ Get active diet plan
+        # 3️⃣ Ensure at least one completed week exists
         # ---------------------------
-        current_plan = DietPlan.objects.filter(
-            user_id=request.user.id,
-            week_start__lte=today,
-            week_end__gte=today,
-        ).first()
-
-        if not current_plan:
-            return Response(
-                {"detail": "No active diet plan found"},
-                status=status.HTTP_400_BAD_REQUEST,
+        last_completed_plan = (
+            DietPlan.objects.filter(
+                user_id=request.user.id,
+                week_end__lt=today,
             )
+            .order_by("-week_end")
+            .first()
+        )
 
-        # ---------------------------
-        # 4️⃣ Enforce FULL WEEK completion
-        # ---------------------------
-        if today <= current_plan.week_end:
+        if not last_completed_plan:
             return Response(
                 {
                     "detail": (
                         "You can update weight only after completing "
-                        "the current diet week"
+                        "at least one diet week"
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # ---------------------------
-        # 5️⃣ Enforce once-per-week weight update
+        # 4️⃣ Enforce once-per-week weight update
         # ---------------------------
         last_log = (
             WeightLog.objects.filter(user_id=request.user.id)
@@ -375,7 +384,7 @@ class UpdateWeightView(APIView):
             )
 
         # ---------------------------
-        # 6️⃣ Update profile + log weight
+        # 5️⃣ Update profile + log weight (atomic)
         # ---------------------------
         with transaction.atomic():
             profile.weight_kg = weight
@@ -388,7 +397,7 @@ class UpdateWeightView(APIView):
             )
 
         # ---------------------------
-        # 7️⃣ Stop if target achieved
+        # 6️⃣ Stop if target achieved
         # ---------------------------
         if (
             profile.goal == "cutting"
@@ -401,47 +410,48 @@ class UpdateWeightView(APIView):
         ):
             return Response(
                 {
-                    "detail": "Target weight achieved. Diet plan generation stopped."
+                    "detail": (
+                        "Target weight achieved. "
+                        "Diet plan generation stopped."
+                    )
                 },
                 status=status.HTTP_200_OK,
             )
 
         # ---------------------------
-        # 8️⃣ Generate new diet plan (next week)
+        # 7️⃣ Calculate NEXT week
         # ---------------------------
-        week_start = get_week_start(today + timedelta(days=7))
-        week_end = week_start + timedelta(days=6)
+        week_start = today
+        week_end = today + timedelta(days=6)
 
-        payload = build_payload_from_profile(profile)
-
-        try:
-            ai_response = generate_diet_plan(payload)
-        except AIServiceError:
-            return Response(
-                {"detail": "AI service unavailable. Try again later."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
-        new_plan = DietPlan.objects.create(
+        # ---------------------------
+        # 8️⃣ SAFE diet plan creation (FIXED)
+        # ---------------------------
+        plan, created = DietPlan.objects.update_or_create(
             user_id=request.user.id,
             week_start=week_start,
-            week_end=week_end,
-            daily_calories=ai_response["daily_calories"],
-            macros=ai_response["macros"],
-            meals=ai_response["meals"],
-            version=ai_response.get("version", "diet_v1"),
+            defaults={
+                "week_end": week_end,
+                "status": "pending",
+            },
         )
+
+        # Trigger AI only when needed
+        if created or plan.status != "pending":
+            plan.status = "pending"
+            plan.save(update_fields=["status"])
+            generate_diet_plan_task.delay(plan.id)
 
         # ---------------------------
         # 9️⃣ Response
         # ---------------------------
         return Response(
             {
-                "detail": "Weight updated and new diet plan generated",
+                "detail": "Weight updated. New diet plan is being generated.",
                 "new_plan": {
-                    "week_start": new_plan.week_start,
-                    "week_end": new_plan.week_end,
-                    "daily_calories": new_plan.daily_calories,
+                    "week_start": plan.week_start,
+                    "week_end": plan.week_end,
+                    "status": plan.status,
                 },
             },
             status=status.HTTP_200_OK,

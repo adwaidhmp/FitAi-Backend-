@@ -244,7 +244,7 @@ class WorkoutPlan(models.Model):
 
     week_start = models.DateField(db_index=True)
     week_end = models.DateField(db_index=True)
-
+    
     goal = models.CharField(max_length=32)
     workout_type = models.CharField(
         max_length=16,
