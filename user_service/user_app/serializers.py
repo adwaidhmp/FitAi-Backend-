@@ -161,6 +161,7 @@ class WorkoutPlanSerializer(serializers.ModelSerializer):
             "sessions",
             "estimated_weekly_calories",
             "created_at",
+            "status",
         ]
 
 

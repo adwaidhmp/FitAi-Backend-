@@ -24,6 +24,43 @@ class GenerateWorkoutView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        week_start, week_end = get_week_range(date.today())
+
+        plan = WorkoutPlan.objects.filter(
+            user_id=request.user.id,
+            week_start=week_start,
+        ).first()
+
+        # 🚫 Block if pending
+        if plan and plan.status == "pending":
+            return Response(
+                {"status": "pending"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # 🚫 Block if already ready
+        if plan and plan.status == "ready":
+            return Response(
+                {"status": "ready"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # ✅ First click OR retry after failure
+        if not plan:
+            WorkoutPlan.objects.create(
+                user_id=request.user.id,
+                week_start=week_start,
+                week_end=week_end,
+                goal="",
+                workout_type=workout_type,
+                sessions={},
+                estimated_weekly_calories=0,
+                status="pending",
+            )
+        else:
+            plan.status = "pending"
+            plan.save(update_fields=["status"])
+
         generate_weekly_workout_task.delay(
             str(request.user.id),
             workout_type,
@@ -39,22 +76,38 @@ class GetCurrentWorkoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user_id = request.user.id
         week_start, _ = get_week_range(date.today())
 
         plan = WorkoutPlan.objects.filter(
-            user_id=user_id,
+            user_id=request.user.id,
             week_start=week_start,
         ).first()
 
         if not plan:
             return Response(
-                None,
+                {"status": "idle"},
                 status=status.HTTP_200_OK,
             )
 
-        serializer = WorkoutPlanSerializer(plan)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        if plan.status == "pending":
+            return Response(
+                {"status": "pending"},
+                status=status.HTTP_200_OK,
+            )
+
+        if plan.status == "failed":
+            return Response(
+                {"status": "failed"},
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            {
+                "status": "ready",
+                "plan": WorkoutPlanSerializer(plan).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class LogWorkoutExerciseView(APIView):

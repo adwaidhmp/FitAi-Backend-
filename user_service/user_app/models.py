@@ -286,6 +286,16 @@ class WorkoutPlan(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    status = models.CharField(
+        max_length=10,
+        choices=[
+            ("pending", "Pending"),
+            ("ready", "Ready"),
+            ("failed", "Failed"),
+        ],
+        default="pending",
+    )
+
     class Meta:
         db_table = "workout_plan"
         unique_together = ("user_id", "week_start")

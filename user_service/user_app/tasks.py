@@ -67,79 +67,93 @@ def normalize_durations(exercises, min_minutes, max_minutes):
     retry_kwargs={"max_retries": 3},
 )
 def generate_weekly_workout_task(self, user_id, workout_type):
-    profile = UserProfile.objects.get(user_id=user_id)
-
-    if not profile.profile_completed:
-        raise ValueError("Profile not completed")
-
     week_start, week_end = get_week_range(date.today())
 
-    if WorkoutPlan.objects.filter(
+    plan = WorkoutPlan.objects.get(
         user_id=user_id,
         week_start=week_start,
-    ).exists():
-        return "already_exists"
-
-    if profile.exercise_experience == "beginner":
-        exercise_count = 5
-        min_duration, max_duration = 30, 40
-    elif profile.exercise_experience == "intermediate":
-        exercise_count = 6
-        min_duration, max_duration = 35, 50
-    else:
-        exercise_count = 7
-        min_duration, max_duration = 45, 60
-
-    payload = build_workout_ai_payload(
-        profile=profile,
-        workout_type=workout_type,
-        exercise_count=exercise_count,
-        min_duration=min_duration,
-        max_duration=max_duration,
     )
 
-    sys.stderr.write("\n🔥 WORKOUT PAYLOAD 🔥\n")
-    sys.stderr.write(str(payload) + "\n")
-    sys.stderr.flush()
+    try:
+        # -------------------------
+        # SAFE ZONE START
+        # -------------------------
+        profile = UserProfile.objects.get(user_id=user_id)
 
-    ai_result = request_ai_workout(payload)
+        if not profile.profile_completed:
+            raise ValueError("Profile not completed")
 
-    exercises = ai_result["sessions"][0]["exercises"]
+        if profile.exercise_experience == "beginner":
+            exercise_count = 5
+            min_duration, max_duration = 30, 40
+        elif profile.exercise_experience == "intermediate":
+            exercise_count = 6
+            min_duration, max_duration = 35, 50
+        else:
+            exercise_count = 7
+            min_duration, max_duration = 45, 60
 
-    # 🔧 FIX AI MATH (THIS SOLVES YOUR ERROR)
-    normalize_durations(exercises, min_duration, max_duration)
+        payload = build_workout_ai_payload(
+            profile=profile,
+            workout_type=workout_type,
+            exercise_count=exercise_count,
+            min_duration=min_duration,
+            max_duration=max_duration,
+        )
 
-    validate_ai_workout(
-        ai_result,
-        exercise_count,
-        min_duration,
-        max_duration,
-    )
+        sys.stderr.write("\n🔥 WORKOUT PAYLOAD 🔥\n")
+        sys.stderr.write(str(payload) + "\n")
+        sys.stderr.flush()
+        
+        ai_result = request_ai_workout(payload)
 
-    with transaction.atomic():
+        exercises = ai_result["sessions"][0]["exercises"]
+        normalize_durations(exercises, min_duration, max_duration)
+
+        validate_ai_workout(
+            ai_result,
+            exercise_count,
+            min_duration,
+            max_duration,
+        )
+
         total_daily = Decimal("0")
-
         for ex in exercises:
             calories = calculate_calories(
                 ex["duration_sec"],
                 profile.weight_kg,
                 ex["intensity"],
             )
-
             ex["estimated_calories"] = int(calories)
             total_daily += calories
 
-        WorkoutPlan.objects.create(
+        # -------------------------
+        # SAVE SUCCESS
+        # -------------------------
+        WorkoutPlan.objects.filter(
             user_id=user_id,
             week_start=week_start,
+        ).update(
             week_end=week_end,
             goal=profile.goal,
             workout_type=workout_type,
             sessions=ai_result,
-            estimated_weekly_calories=total_daily * Decimal("7"),
+            estimated_weekly_calories=int(total_daily * Decimal("7")),
+            status="ready",
         )
 
-    return "created"
+        return "created"
+
+    except Exception as e:
+        # -------------------------
+        # SAVE FAILURE
+        # -------------------------
+        WorkoutPlan.objects.filter(
+            user_id=user_id,
+            week_start=week_start,
+        ).update(status="failed")
+
+        raise e
 
 
 @shared_task(
