@@ -39,6 +39,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "preferred_equipment",
             "notes",
             "is_premium",
+            "premium_expires_at",
             "profile_completed",
             "created_at",
             "updated_at",

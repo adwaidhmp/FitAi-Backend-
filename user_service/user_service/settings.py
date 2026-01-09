@@ -5,6 +5,8 @@ from pathlib import Path
 from decouple import config
 from kombu import Queue
 
+from celery.schedules import crontab
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = "django-insecure-7-r#g^cz$2)41%dml%1mvo)s9cwp9i0hhm!3fska!%paqzz@&4"
@@ -142,3 +144,21 @@ CHANNEL_LAYERS = {
         },
     },
 }
+
+
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+
+
+CELERY_BEAT_SCHEDULE = {
+    "expire-premium-users-daily": {
+        "task": "user.tasks.handle_expired_premium_users",
+        "schedule": crontab(hour=0, minute=5),  # daily
+    },
+}
+
+AWS_REGION = os.getenv("AWS_REGION")
+AWS_PREMIUM_EXPIRED_QUEUE_URL = os.getenv("AWS_PREMIUM_EXPIRED_QUEUE_URL")
+
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY= os.getenv("AWS_SECRET_ACCESS_KEY")

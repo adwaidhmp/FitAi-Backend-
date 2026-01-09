@@ -13,6 +13,8 @@ import uuid
 from .helper.message_normalizer import normalize_for_ws
 from django.db.models import Q
 from django.db import transaction
+
+
 # -------------------------------------------------
 # USER CHAT ROOM LIST (with has_unread)
 # -------------------------------------------------

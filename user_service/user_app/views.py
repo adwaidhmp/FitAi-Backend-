@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 
 from .models import TrainerBooking, UserProfile
 from .serializers import UserProfileSerializer
+from .permissions import IsPremiumUser
 
 
 class UserProfileView(APIView):
@@ -63,7 +64,7 @@ class ProfileChoicesView(APIView):
 
 
 class BookTrainerView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated,IsPremiumUser]
 
     def post(self, request, trainer_user_id):
         user_id = request.user.id
@@ -92,7 +93,7 @@ class BookTrainerView(APIView):
 
 
 class MyTrainersView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated,IsPremiumUser]
 
     def get(self, request):
         user_id = request.user.id
@@ -145,7 +146,7 @@ class MyTrainersView(APIView):
 
 
 class RemoveTrainerView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated,IsPremiumUser]
 
     def delete(self, request):
         booking = (

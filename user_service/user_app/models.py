@@ -89,6 +89,7 @@ class UserProfile(models.Model):
     notes = models.TextField(blank=True)
 
     is_premium = models.BooleanField(default=False)
+    premium_expires_at = models.DateTimeField(null=True, blank=True)
     profile_completed = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -107,8 +108,37 @@ class UserProfile(models.Model):
         return f"Profile {self.user_id}"
 
 
-# Trainer booking model
+#premium model
+class PremiumPlan(models.Model):
+    PLAN_CHOICES = [
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
+    ]
 
+    plan = models.CharField(
+        max_length=20,
+        choices=PLAN_CHOICES,
+        unique=True,
+    )
+    price = models.PositiveIntegerField(help_text="Price in INR")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "premium_plan"
+
+    def __str__(self):
+        return f"{self.plan} - ₹{self.price}"
+
+    @property
+    def duration_days(self):
+        return {
+            "weekly": 7,
+            "monthly": 30,
+        }.get(self.plan, 0)
+
+
+
+# Trainer booking model
 
 class TrainerBooking(models.Model):
     STATUS_PENDING = "pending"

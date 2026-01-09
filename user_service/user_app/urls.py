@@ -37,6 +37,8 @@ from .views import (
 
 from .trainer_userdata_view import TrainerUserOverviewView
 
+from .premium_buy_view import PremiumPlansView, AdminPremiumPlanView,CreatePremiumOrderView,VerifyPremiumPaymentView
+
 urlpatterns = [
     path("profile/", UserProfileView.as_view(), name="user-profile"),
     path("choices/", ProfileChoicesView.as_view(), name="profile-choices"),
@@ -81,4 +83,10 @@ urlpatterns = [
         TrainerUserOverviewView.as_view(),
         name="trainer-user-overview",
     ),
+
+    #premium plans
+    path("admin/premium/plan/", AdminPremiumPlanView.as_view()),
+    path("premium/plans/", PremiumPlansView.as_view()),
+    path("premium/create-order/", CreatePremiumOrderView.as_view()),
+    path("premium/verify/", VerifyPremiumPaymentView.as_view()),
 ]

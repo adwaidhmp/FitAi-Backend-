@@ -9,9 +9,11 @@ from rest_framework.views import APIView
 from .models import TrainerBooking, UserProfile
 from .permissions import IsTrainer
 from django.shortcuts import get_object_or_404
+from .permissions import IsPremiumUser
 
+#user side approved trainers list
 class ApprovedTrainerListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,IsPremiumUser]
 
     def get(self, request):
         auth_header = request.headers.get("Authorization")
@@ -76,7 +78,7 @@ class ApprovedTrainerListView(APIView):
 
 # internal use for trainer to see pending clients
 class PendingClientsTrainer(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsTrainer]
 
     def get(self, request):
         trainer_id = UUID(str(request.user.id))

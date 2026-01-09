@@ -223,3 +223,50 @@ def generate_diet_plan_task(self, plan_id):
     plan.version = ai_response.get("version", "diet_v1")
     plan.status = "ready"
     plan.save()
+
+
+
+import json
+import boto3
+from celery import shared_task
+from django.utils import timezone
+from django.conf import settings
+
+from .models import UserProfile
+
+
+@shared_task(bind=True, max_retries=3)
+def handle_expired_premium_users(self):
+    now = timezone.now()
+
+    expired_profiles = UserProfile.objects.filter(
+        is_premium=True,
+        premium_expires_at__lt=now,
+    )
+
+    if not expired_profiles.exists():
+        return "No expired premium users"
+
+    sqs = boto3.client(
+        "sqs",
+        region_name=settings.AWS_REGION,
+    )
+
+    processed = 0
+
+    for profile in expired_profiles:
+        # 1️⃣ Downgrade user (SOURCE OF TRUTH)
+        profile.is_premium = False
+        profile.save(update_fields=["is_premium"])
+
+        # 2️⃣ Send email job
+        sqs.send_message(
+            QueueUrl=settings.AWS_PREMIUM_EXPIRED_QUEUE_URL,
+            MessageBody=json.dumps({
+                "email": profile.user.email,
+            }),
+        )
+
+        processed += 1
+
+    return f"{processed} users downgraded & notified"
