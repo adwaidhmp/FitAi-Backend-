@@ -174,6 +174,9 @@ def handle_booking_decision(self, payload):
     if not booking_id or not trainer_user_id or not user_id:
         raise ValueError("Invalid booking decision payload")
 
+    if action not in ("approve", "reject"):
+        return
+
     with transaction.atomic():
         booking = (
             TrainerBooking.objects
@@ -188,7 +191,6 @@ def handle_booking_decision(self, payload):
         if not booking:
             return
 
-        # ✅ Idempotency guard
         if booking.status != TrainerBooking.STATUS_PENDING:
             return
 
@@ -196,11 +198,28 @@ def handle_booking_decision(self, payload):
             booking.status = TrainerBooking.STATUS_APPROVED
             booking.save(update_fields=["status"])
 
-            ChatRoom.objects.get_or_create(
+            # 🔒 Ensure only one active room
+            ChatRoom.objects.filter(
                 user_id=user_id,
                 trainer_user_id=trainer_user_id,
-                defaults={"is_active": True},
-            )
+                is_active=True,
+            ).update(is_active=False)
+
+            room = ChatRoom.objects.filter(
+                user_id=user_id,
+                trainer_user_id=trainer_user_id,
+                is_active=False,
+            ).first()
+
+            if room:
+                room.is_active = True
+                room.save(update_fields=["is_active"])
+            else:
+                ChatRoom.objects.create(
+                    user_id=user_id,
+                    trainer_user_id=trainer_user_id,
+                    is_active=True,
+                )
 
         elif action == "reject":
             booking.status = TrainerBooking.STATUS_REJECTED
