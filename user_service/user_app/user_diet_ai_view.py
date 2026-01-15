@@ -12,7 +12,7 @@ from .helper.ai_payload import build_payload_from_profile
 from .helper.meals import meal_already_logged
 from .models import DietPlan, MealLog, UserProfile, WeightLog
 from .tasks import estimate_nutrition_task, generate_diet_plan_task
-
+from django.core.cache import cache
 
 def get_week_start(today):
     return today - timedelta(days=today.weekday())
@@ -76,6 +76,8 @@ class GenerateDietPlanView(APIView):
 
         # 6️⃣ Enqueue async generation
         generate_diet_plan_task.delay(plan.id)
+        
+        cache.delete(f"diet:current:{request.user.id}:v1")
 
         # 7️⃣ Immediate response
         return Response(
@@ -91,59 +93,65 @@ class GenerateDietPlanView(APIView):
 class CurrentDietPlanView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    CACHE_TTL = 60 * 60  # 1 hour
+    CACHE_VERSION = "v1"
+
+    def _cache_key(self, user_id):
+        return f"diet:current:{user_id}:{self.CACHE_VERSION}"
+
     def get(self, request):
+        user_id = request.user.id
         today = now().date()
+        cache_key = self._cache_key(user_id)
+
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached, status=status.HTTP_200_OK)
 
         # 1️⃣ Try ACTIVE plan
         plan = DietPlan.objects.filter(
-            user_id=request.user.id,
+            user_id=user_id,
             week_start__lte=today,
             week_end__gte=today,
         ).first()
 
-        # 2️⃣ If active plan exists
         if plan:
-            return Response(
-                {
-                    "has_plan": True,
-                    "status": plan.status,
-                    "daily_calories": plan.daily_calories,
-                    "macros": plan.macros,
-                    "meals": plan.meals,
-                    "version": plan.version,
-                    "week_start": plan.week_start,
-                    "week_end": plan.week_end,
-                    "can_generate": False,
-                    "can_update_weight": False,
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        # 3️⃣ No active plan → check if user EVER had a plan
-        has_any_plan = DietPlan.objects.filter(
-            user_id=request.user.id
-        ).exists()
-
-        # 🆕 Brand-new user → allow manual generation
-        if not has_any_plan:
-            return Response(
-                {
-                    "has_plan": False,
-                    "can_generate": True,
-                    "can_update_weight": False,
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        # 🔁 Existing user → must update weight
-        return Response(
-            {
-                "has_plan": False,
+            data = {
+                "has_plan": True,
+                "status": plan.status,
+                "daily_calories": plan.daily_calories,
+                "macros": plan.macros,
+                "meals": plan.meals,
+                "version": plan.version,
+                "week_start": plan.week_start,
+                "week_end": plan.week_end,
                 "can_generate": False,
-                "can_update_weight": True,
-            },
-            status=status.HTTP_200_OK,
-        )
+                "can_update_weight": False,
+            }
+
+            cache.set(cache_key, data, self.CACHE_TTL)
+            return Response(data, status=status.HTTP_200_OK)
+
+        # 2️⃣ No active plan → check if user EVER had a plan
+        has_any_plan = DietPlan.objects.filter(user_id=user_id).exists()
+
+        if not has_any_plan:
+            data = {
+                "has_plan": False,
+                "can_generate": True,
+                "can_update_weight": False,
+            }
+            cache.set(cache_key, data, self.CACHE_TTL)
+            return Response(data, status=status.HTTP_200_OK)
+
+        data = {
+            "has_plan": False,
+            "can_generate": False,
+            "can_update_weight": True,
+        }
+
+        cache.set(cache_key, data, self.CACHE_TTL)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class FollowMealFromPlanView(APIView):

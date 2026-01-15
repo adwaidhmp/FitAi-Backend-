@@ -7,7 +7,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from django.core.cache import cache
 from .models import TrainerCertificate, TrainerProfile
 from .permissions import IsTrainerOwner
 from .serializers import (
@@ -22,28 +22,56 @@ class TrainerProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsTrainerOwner]
     parser_classes = [MultiPartParser, FormParser]
 
+    CACHE_TTL = 60 * 30  # 30 minutes
+    CACHE_VERSION = "v1"
+
+    def _cache_key(self, user_id):
+        return f"trainer_profile:{user_id}:{self.CACHE_VERSION}"
+
     def get_profile(self, user):
         return TrainerProfile.objects.filter(user_id=user.id).first()
 
+    # -------------------------
+    # GET (CACHED)
+    # -------------------------
     def get(self, request):
+        cache_key = self._cache_key(request.user.id)
+
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached, status=status.HTTP_200_OK)
+
         profile = self.get_profile(request.user)
         if not profile:
             return Response(
-                {"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND
+                {"detail": "Profile not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
-        serializer = TrainerProfileSerializer(profile, context={"request": request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
+        data = TrainerProfileSerializer(
+            profile, context={"request": request}
+        ).data
+
+        cache.set(cache_key, data, self.CACHE_TTL)
+        return Response(data, status=status.HTTP_200_OK)
+
+    # -------------------------
+    # PATCH (INVALIDATES CACHE)
+    # -------------------------
     def patch(self, request):
         orig_profile = self.get_profile(request.user)
         if not orig_profile:
             return Response(
-                {"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND
+                {"detail": "Profile not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        # validate incoming profile data up front (keeps early errors)
+        # validate early
         tmp_serializer = TrainerProfileSerializer(
-            orig_profile, data=request.data, partial=True, context={"request": request}
+            orig_profile,
+            data=request.data,
+            partial=True,
+            context={"request": request},
         )
         tmp_serializer.is_valid(raise_exception=True)
 
@@ -54,13 +82,12 @@ class TrainerProfileView(APIView):
             files = upload_serializer.validated_data.get("files", files)
 
         created_certs = []
+
         with transaction.atomic():
-            # lock the row and use the locked instance for saving
             locked_profile = TrainerProfile.objects.select_for_update().get(
                 pk=orig_profile.pk
             )
 
-            # re-create serializer bound to the locked instance, validate, then save
             profile_serializer = TrainerProfileSerializer(
                 locked_profile,
                 data=request.data,
@@ -70,7 +97,6 @@ class TrainerProfileView(APIView):
             profile_serializer.is_valid(raise_exception=True)
             profile = profile_serializer.save()
 
-            # recompute is_completed only when needed and save minimally
             new_is_completed = (
                 bool(profile.bio)
                 and bool(profile.specialties)
@@ -80,17 +106,18 @@ class TrainerProfileView(APIView):
                 profile.is_completed = new_is_completed
                 profile.save(update_fields=["is_completed"])
 
-            # create cert records
             for f in files:
                 created_certs.append(TrainerCertificate(trainer=profile, file=f))
+
             if created_certs:
                 TrainerCertificate.objects.bulk_create(created_certs)
-                # reload created certs for serialization
                 created_certs = list(
-                    TrainerCertificate.objects.filter(trainer=profile).order_by("-id")[
-                        : len(created_certs)
-                    ]
+                    TrainerCertificate.objects.filter(trainer=profile)
+                    .order_by("-id")[: len(created_certs)]
                 )
+
+        # 🔥 DELETE CACHE AFTER SUCCESSFUL UPDATE
+        cache.delete(self._cache_key(request.user.id))
 
         certs_data = TrainerCertificateModelSerializer(
             created_certs, many=True, context={"request": request}
@@ -99,7 +126,9 @@ class TrainerProfileView(APIView):
             profile, context={"request": request}
         ).data
 
-        status_code = status.HTTP_201_CREATED if certs_data else status.HTTP_200_OK
+        status_code = (
+            status.HTTP_201_CREATED if certs_data else status.HTTP_200_OK
+        )
         return Response(
             {"profile": profile_data, "created_certificates": certs_data},
             status=status_code,

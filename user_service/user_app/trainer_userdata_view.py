@@ -87,7 +87,7 @@ class TrainerUserOverviewView(APIView):
         ).order_by("logged_at")
 
         # ----------------------------
-        # Serialize
+        # Serialize response
         # ----------------------------
         serializer = TrainerUserOverviewSerializer(
             {

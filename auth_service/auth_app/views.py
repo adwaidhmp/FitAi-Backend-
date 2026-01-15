@@ -8,7 +8,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from django.core.cache import cache
 from .models import User
 from .serializers import (
     ForgotPasswordConfirmSerializer,
@@ -227,21 +227,70 @@ class LoginView(APIView):
 
 
 class ProfileView(APIView):
-
     permission_classes = [permissions.IsAuthenticated]
 
+    CACHE_TTL = 60 * 30  # 30 minutes
+    CACHE_VERSION = "v1"
+
+    def _cache_key(self, user_id):
+        return f"user_profile:{user_id}:{self.CACHE_VERSION}"
+
     def get(self, request):
+        cache_key = self._cache_key(request.user.id)
+
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached, status=status.HTTP_200_OK)
+
         serializer = ProfileSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = serializer.data
+
+        cache.set(cache_key, data, self.CACHE_TTL)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class TrainerProfileView(APIView):
-
     permission_classes = [permissions.IsAuthenticated]
 
+    CACHE_TTL = 60 * 30
+    CACHE_VERSION = "v1"
+
+    def _cache_key(self, user_id):
+        return f"trainer_profile:{user_id}:{self.CACHE_VERSION}"
+
     def get(self, request):
+        cache_key = self._cache_key(request.user.id)
+
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached, status=status.HTTP_200_OK)
+
         serializer = TrainerProfileSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = serializer.data
+
+        cache.set(cache_key, data, self.CACHE_TTL)
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class ProfileEditView(generics.RetrieveUpdateAPIView):
+    http_method_names = ["get", "patch", "put", "head", "options"]
+    serializer_class = ProfileUpdateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    CACHE_VERSION = "v1"
+
+    def get_object(self):
+        return self.request.user
+
+    def perform_update(self, serializer):
+        user = serializer.save()
+
+        # 🔥 invalidate user profile cache
+        cache.delete(f"user_profile:{user.id}:{self.CACHE_VERSION}")
+
+        # 🔥 invalidate trainer profile cache
+        cache.delete(f"trainer_profile:{user.id}:{self.CACHE_VERSION}")
+
 
 
 class GoogleLoginView(APIView):
@@ -369,14 +418,6 @@ class GoogleLoginView(APIView):
             status=status.HTTP_200_OK,
         )
 
-
-class ProfileEditView(generics.RetrieveUpdateAPIView):
-    http_method_names = ["get", "patch", "put", "head", "options"]
-    serializer_class = ProfileUpdateSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_object(self):
-        return self.request.user
 
 
 class ForgotPasswordRequestView(APIView):

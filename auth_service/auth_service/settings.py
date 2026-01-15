@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_yasg",
     "corsheaders",
     "rest_framework_simplejwt.token_blacklist",
     "auth_app",
@@ -149,8 +150,12 @@ CACHES = {
             "SSL": True,
             "SSL_CERT_REQS": ssl.CERT_NONE,  # ← IMPORTANT
         },
+        "KEY_PREFIX": "auth_service:cache",
     }
 }
+
+DJANGO_REDIS_IGNORE_EXCEPTIONS = True
+
 
 # OTP policy
 OTP_TTL_SECONDS = 300

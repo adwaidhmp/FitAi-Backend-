@@ -10,37 +10,65 @@ from rest_framework.views import APIView
 from .models import TrainerBooking, UserProfile
 from .serializers import UserProfileSerializer
 from .permissions import IsPremiumUser
+from django.core.cache import cache
 
 
 class UserProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+
+    CACHE_TTL = 60 * 60  # 1 hr
+    CACHE_VERSION = "v1"
+
+    def _cache_key(self, user_id: str) -> str:
+        return f"profile:{user_id}:{self.CACHE_VERSION}"
 
     def get_profile(self, user):
         # user is the SimpleNamespace created by SimpleJWTAuth
         return UserProfile.objects.filter(user_id=user.id).first()
 
     def get(self, request):
+        user_id = request.user.id
+        cache_key = self._cache_key(user_id)
+
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached, status=status.HTTP_200_OK)
+
         profile = self.get_profile(request.user)
         if not profile:
             return Response(
-                {"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND
+                {"detail": "Profile not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = UserProfileSerializer(profile)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = UserProfileSerializer(profile).data
+        cache.set(cache_key, data, self.CACHE_TTL)
+
+        return Response(data, status=status.HTTP_200_OK)
 
     def patch(self, request):
+        user_id = request.user.id
+        cache_key = self._cache_key(user_id)
+
         profile = self.get_profile(request.user)
         if not profile:
             return Response(
-                {"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND
+                {"detail": "Profile not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = UserProfileSerializer(
-            profile, data=request.data, partial=True, context={"request": request}
+            profile,
+            data=request.data,
+            partial=True,
+            context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        # 🔥 Invalidate cache AFTER successful update
+        cache.delete(cache_key)
+
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -90,6 +118,7 @@ class BookTrainerView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
 
 
 class MyTrainersView(APIView):
