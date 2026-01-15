@@ -13,7 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from datetime import timedelta
 from pathlib import Path
-
+import ssl
 from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_yasg",
     "corsheaders",
     "trainer_app",
 ]
@@ -159,3 +160,21 @@ TRAINER_SERVICE_URL = os.getenv("TRAINER_SERVICE_URL")
 CELERY_BROKER_URL = os.getenv("RABBIT_URL")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
+
+UPSTASH_REDIS_URL = os.getenv("UPSTASH_REDIS_URL")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": UPSTASH_REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "SSL": True,
+            "SSL_CERT_REQS": ssl.CERT_NONE,
+        },
+        "KEY_PREFIX": "trainer_service:cache",
+    }
+}
+
+# Fail open if Redis is down
+DJANGO_REDIS_IGNORE_EXCEPTIONS = True

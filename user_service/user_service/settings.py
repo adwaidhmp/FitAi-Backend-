@@ -4,7 +4,7 @@ from pathlib import Path
 
 from decouple import config
 from kombu import Queue
-
+import ssl
 from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_yasg",
     "corsheaders",
     "user_app",
     "channels",
@@ -162,3 +163,22 @@ AWS_PREMIUM_EXPIRED_QUEUE_URL = os.getenv("AWS_PREMIUM_EXPIRED_QUEUE_URL")
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY= os.getenv("AWS_SECRET_ACCESS_KEY")
+
+
+UPSTASH_REDIS_URL = os.getenv("UPSTASH_REDIS_URL")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": UPSTASH_REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "SSL": True,
+            "SSL_CERT_REQS": ssl.CERT_NONE,
+        },
+        "KEY_PREFIX": "user_service:cache",
+    }
+}
+
+# If Redis is down, app should still work (fail-open)
+DJANGO_REDIS_IGNORE_EXCEPTIONS = True
