@@ -11,7 +11,7 @@ from .models import TrainerBooking, UserProfile
 from .serializers import UserProfileSerializer
 from .permissions import IsPremiumUser
 from django.core.cache import cache
-
+from .tasks import emit_webhook
 
 class UserProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -109,6 +109,15 @@ class BookTrainerView(APIView):
         booking = TrainerBooking.objects.create(
             user_id=user_id,
             trainer_user_id=trainer_user_id,
+        )
+
+        emit_webhook.delay(
+            event="TRAINER_BOOKED",
+            payload={
+                "booking_id": str(booking.id),
+                "trainer_user_id": str(trainer_user_id),
+                "user_id": str(user_id),
+            },
         )
 
         return Response(

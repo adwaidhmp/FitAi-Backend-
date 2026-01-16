@@ -32,6 +32,5 @@ class IsPremiumUser(BasePermission):
 
         return UserProfile.objects.filter(
             user_id=request.user.id,
-            is_premium=True,
-            premium_expires_at__gt=timezone.now(),
+            is_premium=True
         ).exists()

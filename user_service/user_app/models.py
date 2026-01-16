@@ -96,6 +96,8 @@ class UserProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
+    fcm_token = models.TextField(null=True, blank=True)
+
     class Meta:
         db_table = "user_profile"
         indexes = [

@@ -46,7 +46,7 @@ class ApprovedTrainerListView(APIView):
             f"{settings.TRAINER_SERVICE_URL}/api/v1/trainer/internal/trainers/by-user-ids/",
             json={"user_ids": user_ids},
             headers=headers,
-            timeout=5,
+            timeout=10,
         )
 
         if not trainer_resp.ok:

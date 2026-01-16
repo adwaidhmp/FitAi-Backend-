@@ -38,6 +38,7 @@ from .views import (
 from .trainer_userdata_view import TrainerUserOverviewView
 
 from .premium_buy_view import PremiumPlansView, AdminPremiumPlanView,CreatePremiumOrderView,VerifyPremiumPaymentView
+from .fmc_token_notif_view import SaveFCMTokenView
 
 urlpatterns = [
     path("profile/", UserProfileView.as_view(), name="user-profile"),
@@ -89,4 +90,7 @@ urlpatterns = [
     path("premium/plans/", PremiumPlansView.as_view()),
     path("premium/create-order/", CreatePremiumOrderView.as_view()),
     path("premium/verify/", VerifyPremiumPaymentView.as_view()),
+
+    #fcm token for notifications
+    path("fcm-token/", SaveFCMTokenView.as_view()),
 ]
