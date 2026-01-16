@@ -12,6 +12,7 @@ class TrainerProfile(models.Model):
     experience_years = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     is_completed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    fcm_token = models.TextField(null=True, blank=True)
 
     class Meta:
         indexes = [

@@ -26,3 +26,4 @@ def cleanup_expired_refresh_tokens():
     qs = RefreshTokenRecord.objects.filter(expires_at__lt=now)
     count = qs.delete()[0]
     return {"deleted": count}
+

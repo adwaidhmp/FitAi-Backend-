@@ -152,9 +152,9 @@ RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 
 
 CELERY_BEAT_SCHEDULE = {
-    "expire-premium-users-daily": {
+    "expire-premium-users-every-6-hours": {
         "task": "user.tasks.handle_expired_premium_users",
-        "schedule": crontab(hour=0, minute=5),  # daily
+        "schedule": crontab(minute=0, hour="*/6"),
     },
 }
 

@@ -66,31 +66,17 @@ class GenerateWorkoutView(APIView):
             workout_type,
         )
 
-        cache.delete( f"workout:current:{request.user.id}:{week_start.isoformat()}:v1" )
-
         return Response(
             {"status": "queued"},
             status=status.HTTP_202_ACCEPTED,
         )
 
-
 class GetCurrentWorkoutView(APIView):
     permission_classes = [IsAuthenticated]
-
-    CACHE_TTL = 60 * 60  # 1 hour
-    CACHE_VERSION = "v1"
-
-    def _cache_key(self, user_id, week_start):
-        return f"workout:current:{user_id}:{week_start.isoformat()}:{self.CACHE_VERSION}"
 
     def get(self, request):
         user_id = request.user.id
         week_start, _ = get_week_range(date.today())
-
-        cache_key = self._cache_key(user_id, week_start)
-        cached = cache.get(cache_key)
-        if cached:
-            return Response(cached, status=status.HTTP_200_OK)
 
         plan = WorkoutPlan.objects.filter(
             user_id=user_id,
@@ -98,27 +84,30 @@ class GetCurrentWorkoutView(APIView):
         ).first()
 
         if not plan:
-            data = {"status": "idle"}
-            cache.set(cache_key, data, self.CACHE_TTL)
-            return Response(data, status=status.HTTP_200_OK)
+            return Response(
+                {"status": "idle"},
+                status=status.HTTP_200_OK,
+            )
 
         if plan.status == "pending":
-            data = {"status": "pending"}
-            cache.set(cache_key, data, self.CACHE_TTL)
-            return Response(data, status=status.HTTP_200_OK)
+            return Response(
+                {"status": "pending"},
+                status=status.HTTP_200_OK,
+            )
 
         if plan.status == "failed":
-            data = {"status": "failed"}
-            cache.set(cache_key, data, self.CACHE_TTL)
-            return Response(data, status=status.HTTP_200_OK)
+            return Response(
+                {"status": "failed"},
+                status=status.HTTP_200_OK,
+            )
 
-        data = {
-            "status": "ready",
-            "plan": WorkoutPlanSerializer(plan).data,
-        }
-
-        cache.set(cache_key, data, self.CACHE_TTL)
-        return Response(data, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "status": "ready",
+                "plan": WorkoutPlanSerializer(plan).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class LogWorkoutExerciseView(APIView):

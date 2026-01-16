@@ -267,39 +267,90 @@ from django.conf import settings
 
 from .models import UserProfile
 
+import requests
+from django.conf import settings
 
-@shared_task(bind=True, max_retries=3)
+
+def fetch_email_from_auth(user_id):
+    response = requests.post(
+        f"{settings.AUTH_SERVICE_URL}/api/v1/auth/internal/users/email/",
+        json={"user_id": str(user_id)},
+        timeout=10,
+    )
+
+    response.raise_for_status()
+    return response.json()["email"]
+
+
+
+@shared_task(
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=5,
+)
 def handle_expired_premium_users(self):
     now = timezone.now()
 
-    expired_profiles = UserProfile.objects.filter(
-        is_premium=True,
-        premium_expires_at__lt=now,
+    expired_profiles = list(
+        UserProfile.objects.filter(
+            is_premium=True,
+            premium_expires_at__lt=now,
+        )
     )
 
-    if not expired_profiles.exists():
+    if not expired_profiles:
         return "No expired premium users"
 
-    sqs = boto3.client(
-        "sqs",
-        region_name=settings.AWS_REGION,
+    #  Bulk update DB (FAST)
+    for profile in expired_profiles:
+        profile.is_premium = False
+        profile.premium_expires_at = None
+
+    UserProfile.objects.bulk_update(
+        expired_profiles,
+        fields=["is_premium", "premium_expires_at"],
     )
 
+    #  External calls
+    sqs = boto3.client("sqs", region_name=settings.AWS_REGION)
+
     processed = 0
-
     for profile in expired_profiles:
-        # 1️⃣ Downgrade user (SOURCE OF TRUTH)
-        profile.is_premium = False
-        profile.save(update_fields=["is_premium"])
+        email = fetch_email_from_auth(profile.user_id)
 
-        # 2️⃣ Send email job
         sqs.send_message(
             QueueUrl=settings.AWS_PREMIUM_EXPIRED_QUEUE_URL,
-            MessageBody=json.dumps({
-                "email": profile.user.email,
-            }),
+            MessageBody=json.dumps({"email": email}),
         )
 
         processed += 1
 
     return f"{processed} users downgraded & notified"
+
+
+#webhook event with celery for notifications to trainer side
+
+import requests
+from celery import shared_task
+
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=5,
+    retry_kwargs={"max_retries": 5},
+)
+def emit_webhook(self, *, url, event, payload):
+    """
+    General webhook emitter for all cross-service events
+    """
+    requests.post(
+        f"{settings.TRAINER_SERVICE_URL}/api/v1/trainer/internal/notification/",
+        json={
+            "event": event,
+            "payload": payload,
+        },
+        timeout=3,
+    )
+
+    

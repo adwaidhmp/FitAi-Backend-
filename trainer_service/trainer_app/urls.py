@@ -22,6 +22,8 @@ from .trainer_user_call_view import(
     )
 
 from .ueserdata_trainer_view import TrainerUserOverviewProxyView    
+from .fmc_token_notif_view import SaveFCMTokenView
+from .webhook_notification_view import TrainerEventsWebhookView
 
 urlpatterns = [
     path("profile/", TrainerProfileView.as_view(), name="trainer-profile"),
@@ -80,6 +82,10 @@ urlpatterns = [
         TrainerUserOverviewProxyView.as_view(),
         name="trainer-user-overview-proxy",
     ),
+    #fcm token for notifications
+    path("fcm-token/", SaveFCMTokenView.as_view()),
+    #notification webhook endpoint
+    path("internal/notification/", TrainerEventsWebhookView.as_view()),
     ]
 
 

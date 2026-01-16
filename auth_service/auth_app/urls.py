@@ -20,6 +20,8 @@ from .views import (
     TrainerRegisterView,
     UserRegisterView,
 )
+from .user_detail_view import UserEmailByIdView
+
 
 urlpatterns = [
     path("request-otp/", RequestOtpView.as_view(), name="request-otp"),
@@ -65,5 +67,11 @@ urlpatterns = [
     path(
         "internal/users/by-ids/",
         UsersByIdsView.as_view(),
+    ),
+
+    path(
+        "internal/users/email/",
+        UserEmailByIdView.as_view(),
+        name="internal-user-email",
     ),
 ]

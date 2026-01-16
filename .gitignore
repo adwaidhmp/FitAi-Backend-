@@ -25,3 +25,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+
+# Firebase Admin credentials
+**/credentials/firebase-admin.json
