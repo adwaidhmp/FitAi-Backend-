@@ -9,11 +9,13 @@ from chat.models import ChatRoom, Message
 from chat.serializers import UserMessageCreateSerializer, MessageSerializer
 from chat.pagination import ChatMessageCursorPagination
 from chat.ws_notify import notify_new_message
-import uuid 
+import uuid
+
+from user_app.tasks import emit_webhook
 from .helper.message_normalizer import normalize_for_ws
 from django.db.models import Q
 from django.db import transaction
-
+from user_app.tasks import send_user_notification
 
 # -------------------------------------------------
 # USER CHAT ROOM LIST (with has_unread)
@@ -141,10 +143,35 @@ class SendTextMessageView(APIView):
         room.last_message_at = msg.created_at
         room.save(update_fields=["last_message_at"])
 
-        # ✅ SEND ORM INSTANCE TO WS
-        notify_new_message(room.id, msg)
+        def on_commit_actions():
+            # WS notify
+            notify_new_message(room.id, msg)
 
-        # ✅ HTTP RESPONSE IS SERIALIZED
+            # 🔔 Notify trainer ONLY when user sends message
+            if msg.sender_role == Message.SENDER_USER:
+                emit_webhook.delay(
+                    event="NEW_CHAT_MESSAGE",
+                    payload={
+                        "trainer_user_id": str(room.trainer_user_id),
+                        "chat_room_id": str(room.id),
+                    },
+                )
+            else:
+                # 🔔 Trainer → User (user push)
+                send_user_notification.delay(
+                    user_id=str(room.user_id),
+                    title="New Message 💬",
+                    body="Your trainer sent you a message",
+                    data={
+                        "type": "NEW_CHAT_MESSAGE",
+                        "room_id": str(room.id),
+                    },
+                )
+
+        # ✅ Fire only after DB commit
+        transaction.on_commit(on_commit_actions)
+
+        # ✅ HTTP RESPONSE
         return Response(
             MessageSerializer(msg).data,
             status=status.HTTP_201_CREATED,
@@ -205,9 +232,34 @@ class SendMediaMessageView(APIView):
         room.save(update_fields=["last_message_at"])
 
         # ✅ CRITICAL FIX: notify AFTER commit, send ORM instance
-        transaction.on_commit(
-            lambda: notify_new_message(room.id, msg)
-        )
+        def on_commit_actions():
+            # WS notify
+            notify_new_message(room.id, msg)
+
+            # 🔔 Notify trainer ONLY when user sends message
+            if msg.sender_role == Message.SENDER_USER:
+                emit_webhook.delay(
+                    event="NEW_CHAT_MESSAGE",
+                    payload={
+                        "trainer_user_id": str(room.trainer_user_id),
+                        "chat_room_id": str(room.id),
+                    },
+                )
+            else:
+                # 🔔 Trainer → User (user push)
+                send_user_notification.delay(
+                    user_id=str(room.user_id),
+                    title="New Message 💬",
+                    body="Your trainer sent you a message",
+                    data={
+                        "type": "NEW_CHAT_MESSAGE",
+                        "room_id": str(room.id),
+                    },
+                )
+
+
+        # ✅ Fire only after DB commit
+        transaction.on_commit(on_commit_actions)
 
         # ✅ HTTP response is serialized normally
         return Response(

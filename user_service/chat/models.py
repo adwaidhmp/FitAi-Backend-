@@ -116,10 +116,18 @@ class Call(models.Model):
     STATUS_ACTIVE = "active"
     STATUS_ENDED = "ended"
 
+    CALLER_USER = "user"
+    CALLER_TRAINER = "trainer"
+
     STATUS_CHOICES = [
         (STATUS_RINGING, "Ringing"),
         (STATUS_ACTIVE, "Active"),
         (STATUS_ENDED, "Ended"),
+    ]
+
+    CALLER_ROLE_CHOICES = [
+        (CALLER_USER, "User"),
+        (CALLER_TRAINER, "Trainer"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -131,6 +139,11 @@ class Call(models.Model):
     )
 
     started_by = models.UUIDField()  # user_id or trainer_user_id
+
+    caller_role = models.CharField(
+        max_length=10,
+        choices=CALLER_ROLE_CHOICES,
+    )
 
     status = models.CharField(
         max_length=20,

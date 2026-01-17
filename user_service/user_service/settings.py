@@ -152,11 +152,12 @@ RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 
 
 CELERY_BEAT_SCHEDULE = {
-    "expire-premium-users-every-6-hours": {
-        "task": "user.tasks.handle_expired_premium_users",
-        "schedule": crontab(minute=0, hour="*/6"),
+    "expire-premium-users-every-5-minutes": {
+        "task": "user_app.tasks.handle_expired_premium_users",
+        "schedule": crontab(minute="*/360"),
     },
 }
+
 
 AWS_REGION = os.getenv("AWS_REGION")
 AWS_PREMIUM_EXPIRED_QUEUE_URL = os.getenv("AWS_PREMIUM_EXPIRED_QUEUE_URL")

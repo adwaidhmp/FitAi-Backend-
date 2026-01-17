@@ -8,7 +8,7 @@ from rest_framework import status
 from django.conf import settings
 from datetime import timedelta
 from django.utils import timezone
-
+from django.core.cache import cache
 
 
 class AdminPremiumPlanView(APIView):
@@ -167,5 +167,8 @@ class VerifyPremiumPaymentView(APIView):
 
         profile.is_premium = True
         profile.save()
+
+        cache_key = f"profile:{request.user.id}:v1"
+        cache.delete(cache_key)
 
         return Response({"status": "premium_activated"})
