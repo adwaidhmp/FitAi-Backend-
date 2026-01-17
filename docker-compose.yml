@@ -90,6 +90,22 @@ services:
     depends_on:
       - rabbitmq
 
+  # -------- User Celery Beat ----------
+  user-beat:
+    build: ./user_service
+    volumes:
+      - ./user_service:/app
+    env_file:
+      - .env
+    environment:
+      SERVICE_ROLE: celery_beat
+    command: >
+      celery -A user_service.celery beat
+      --loglevel=INFO
+    depends_on:
+      - rabbitmq
+      - redis
+      
   # -------- Trainer Service (WEB) ----------
   trainer-service:
     build: ./trainer_service

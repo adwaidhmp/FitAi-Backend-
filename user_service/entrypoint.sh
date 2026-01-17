@@ -51,6 +51,12 @@ case "${SERVICE_ROLE:-web}" in
     echo "Starting Celery worker..."
     celery -A user_service.celery worker -l info -Q user_tasks
     ;;
+    
+  celery_beat)
+    wait_for "rabbitmq" "5672" "RabbitMQ"
+    echo "Starting Celery Beat..."
+    celery -A user_service.celery beat -l info
+    ;;
 
   *)
     echo "❌ Unknown SERVICE_ROLE: ${SERVICE_ROLE}"

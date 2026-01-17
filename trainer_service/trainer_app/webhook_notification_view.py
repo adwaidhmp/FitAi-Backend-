@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import TrainerProfile
-from ..trainer_service.firebase.push import send_push
+from trainer_service.firebase.push import send_push
 
 
 class TrainerEventsWebhookView(APIView):
@@ -57,9 +57,6 @@ class TrainerEventsWebhookView(APIView):
         elif event == "INCOMING_CALL":
             self.on_incoming_call(fcm_token, payload)
 
-        elif event == "CALL_ACCEPTED":
-            self.on_call_accepted(fcm_token, payload)
-
         # else:
         #     unknown events are safely ignored
 
@@ -99,13 +96,3 @@ class TrainerEventsWebhookView(APIView):
             },
         )
 
-    def on_call_accepted(self, token, payload):
-        send_push(
-            token=token,
-            title="Call Accepted ✅",
-            body="Your call has been accepted",
-            data={
-                "type": "CALL_ACCEPTED",
-                "call_id": payload.get("call_id"),
-            },
-        )

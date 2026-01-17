@@ -1,6 +1,5 @@
 from firebase_admin import messaging
 
-
 def send_push(token, title, body, data=None):
     message = messaging.Message(
         notification=messaging.Notification(

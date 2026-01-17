@@ -4,11 +4,102 @@ from chat.models import ChatRoom
 
 from .helper.ai_client import estimate_nutrition
 from .models import MealLog, TrainerBooking
+import sys
+from datetime import date
+from decimal import Decimal
+
+from celery import shared_task
+from django.db import transaction
+from requests.exceptions import ConnectionError, Timeout
+
+from .helper.ai_client_workout import request_ai_workout
+from .helper.ai_payload import build_workout_ai_payload
+from .helper.calories import calculate_calories
+from .helper.week_date_helper import get_week_range
+from .helper.workout_validators import validate_ai_workout
+from .models import UserProfile, WorkoutPlan
+
+import requests
+from celery import shared_task
 
 
-# ----------------------------
+from user_service.firebase.push import send_push
+from .models import UserProfile
+
+
+from .helper.ai_client import generate_diet_plan, AIServiceError
+from .helper.ai_payload import build_payload_from_profile
+from .models import DietPlan, UserProfile
+
+
+import json
+import boto3
+from celery import shared_task
+from django.utils import timezone
+from django.conf import settings
+
+from .models import UserProfile
+
+import requests
+from django.conf import settings
+
+from django.core.cache import cache
+#webhook event with celery for notifications to trainer side
+
+
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=5,
+    retry_kwargs={"max_retries": 5},
+)
+def emit_webhook(self, *,event, payload):
+    """
+    General webhook emitter for all cross-service events
+    """
+    requests.post(
+        f"{settings.TRAINER_SERVICE_URL}/api/v1/trainer/internal/notification/",
+        json={
+            "event": event,
+            "payload": payload,
+        },
+        timeout=3,
+    )
+
+    
+# user side notification using webhook
+
+
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=5,
+    retry_kwargs={"max_retries": 3},
+)
+def send_user_notification(
+    self,
+    *,
+    user_id,
+    title,
+    body,
+    data=None,
+):
+    profile = UserProfile.objects.filter(user_id=user_id).first()
+
+    if not profile or not profile.fcm_token:
+        return
+
+    send_push(
+        token=profile.fcm_token,
+        title=title,
+        body=body,
+        data=data,
+    )
+
+
+
 # nutrition task below(extra meal, custom meal)
-# ----------------------------
+
 @shared_task(
     bind=True,
     autoretry_for=(Exception,),
@@ -31,27 +122,20 @@ def estimate_nutrition_task(self, meal_log_id):
     meal.fat = total.get("fat", 0)
     meal.save()
 
+    # 🔔 USER NOTIFICATION (PROGRESS UPDATED)
+    send_user_notification.delay(
+        user_id=str(meal.user_id),
+        title="Progress Updated 🍽️",
+        body="Check your progress!",
+        data={
+            "type": "MEAL_NUTRITION_UPDATED & PROGRESS_UPDATED",
+            "meal_log_id": str(meal.id),
+        },
+    )
 
-# ----------------------------
+
+
 # workout task below
-# ----------------------------
-
-
-import sys
-from datetime import date
-from decimal import Decimal
-
-from celery import shared_task
-from django.db import transaction
-from requests.exceptions import ConnectionError, Timeout
-
-from .helper.ai_client_workout import request_ai_workout
-from .helper.ai_payload import build_workout_ai_payload
-from .helper.calories import calculate_calories
-from .helper.week_date_helper import get_week_range
-from .helper.workout_validators import validate_ai_workout
-from .models import UserProfile, WorkoutPlan
-
 
 def normalize_durations(exercises, min_minutes, max_minutes):
     target_seconds = ((min_minutes + max_minutes) // 2) * 60
@@ -141,6 +225,15 @@ def generate_weekly_workout_task(self, user_id, workout_type):
             estimated_weekly_calories=int(total_daily * Decimal("7")),
             status="ready",
         )
+        send_user_notification.delay(
+            user_id=str(user_id),
+            title="Workout Plan Ready 💪",
+            body="Your new workout plan has been generated. Time to train!",
+            data={
+                "type": "WORKOUT_PLAN_READY",
+                "week_start": str(week_start),
+            },
+        )
 
         return "created"
 
@@ -156,81 +249,8 @@ def generate_weekly_workout_task(self, user_id, workout_type):
         raise e
 
 
-@shared_task(
-    bind=True,
-    autoretry_for=(Exception,),
-    retry_backoff=3,
-    retry_kwargs={"max_retries": 5},
-)
-def handle_booking_decision(self, payload):
-    if payload.get("event") != "BOOKING_DECIDED":
-        return
 
-    booking_id = payload.get("booking_id")
-    trainer_user_id = payload.get("trainer_user_id")
-    user_id = payload.get("user_id")
-    action = payload.get("action", "").lower()
-
-    if not booking_id or not trainer_user_id or not user_id:
-        raise ValueError("Invalid booking decision payload")
-
-    if action not in ("approve", "reject"):
-        return
-
-    with transaction.atomic():
-        booking = (
-            TrainerBooking.objects
-            .select_for_update()
-            .filter(
-                id=booking_id,
-                trainer_user_id=trainer_user_id,
-            )
-            .first()
-        )
-
-        if not booking:
-            return
-
-        if booking.status != TrainerBooking.STATUS_PENDING:
-            return
-
-        if action == "approve":
-            booking.status = TrainerBooking.STATUS_APPROVED
-            booking.save(update_fields=["status"])
-
-            # 🔒 Ensure only one active room
-            ChatRoom.objects.filter(
-                user_id=user_id,
-                trainer_user_id=trainer_user_id,
-                is_active=True,
-            ).update(is_active=False)
-
-            room = ChatRoom.objects.filter(
-                user_id=user_id,
-                trainer_user_id=trainer_user_id,
-                is_active=False,
-            ).first()
-
-            if room:
-                room.is_active = True
-                room.save(update_fields=["is_active"])
-            else:
-                ChatRoom.objects.create(
-                    user_id=user_id,
-                    trainer_user_id=trainer_user_id,
-                    is_active=True,
-                )
-
-        elif action == "reject":
-            booking.status = TrainerBooking.STATUS_REJECTED
-            booking.save(update_fields=["status"])
-
-
-
-from .helper.ai_client import generate_diet_plan, AIServiceError
-from .helper.ai_payload import build_payload_from_profile
-from .models import DietPlan, UserProfile
-
+# diet plan task below
 
 @shared_task(
     bind=True,
@@ -257,18 +277,20 @@ def generate_diet_plan_task(self, plan_id):
     plan.status = "ready"
     plan.save()
 
+    send_user_notification.delay(
+        user_id=str(plan.user_id),
+        title="Diet Plan Ready 🥗",
+        body="Your personalized diet plan is ready to follow.",
+        data={
+            "type": "DIET_PLAN_READY",
+            "plan_id": str(plan.id),
+        },
+    )
 
 
-import json
-import boto3
-from celery import shared_task
-from django.utils import timezone
-from django.conf import settings
 
-from .models import UserProfile
+# premium handling tasks below
 
-import requests
-from django.conf import settings
 
 
 def fetch_email_from_auth(user_id):
@@ -312,6 +334,20 @@ def handle_expired_premium_users(self):
         fields=["is_premium", "premium_expires_at"],
     )
 
+    for profile in expired_profiles:
+        cache_key = f"profile:{profile.user_id}:v1"
+        cache.delete(cache_key)
+
+    for profile in expired_profiles:
+        send_user_notification.delay(
+            user_id=str(profile.user_id),
+            title="Premium Expired ⏳",
+            body="Your premium subscription has expired. Renew to continue premium features.",
+            data={
+                "type": "PREMIUM_EXPIRED",
+            },
+        )
+
     #  External calls
     sqs = boto3.client("sqs", region_name=settings.AWS_REGION)
 
@@ -329,28 +365,106 @@ def handle_expired_premium_users(self):
     return f"{processed} users downgraded & notified"
 
 
-#webhook event with celery for notifications to trainer side
 
-import requests
-from celery import shared_task
 
+
+#celery task to handle booking decision from trainer
 @shared_task(
     bind=True,
     autoretry_for=(Exception,),
-    retry_backoff=5,
+    retry_backoff=3,
     retry_kwargs={"max_retries": 5},
 )
-def emit_webhook(self, *, url, event, payload):
-    """
-    General webhook emitter for all cross-service events
-    """
-    requests.post(
-        f"{settings.TRAINER_SERVICE_URL}/api/v1/trainer/internal/notification/",
-        json={
-            "event": event,
-            "payload": payload,
-        },
-        timeout=3,
-    )
+def handle_booking_decision(self, payload):
+    if payload.get("event") != "BOOKING_DECIDED":
+        return
 
-    
+    booking_id = payload.get("booking_id")
+    trainer_user_id = payload.get("trainer_user_id")
+    user_id = payload.get("user_id")
+    action = payload.get("action", "").lower()
+
+    if not booking_id or not trainer_user_id or not user_id:
+        raise ValueError("Invalid booking decision payload")
+
+    if action not in ("approve", "reject"):
+        return
+
+    with transaction.atomic():
+        booking = (
+            TrainerBooking.objects
+            .select_for_update()
+            .filter(
+                id=booking_id,
+                trainer_user_id=trainer_user_id,
+            )
+            .first()
+        )
+
+        if not booking:
+            return
+
+        if booking.status != TrainerBooking.STATUS_PENDING:
+            return
+
+        # -------------------------
+        # APPLY STATE CHANGE
+        # -------------------------
+        if action == "approve":
+            booking.status = TrainerBooking.STATUS_APPROVED
+            booking.save(update_fields=["status"])
+
+            # Ensure only one active room
+            ChatRoom.objects.filter(
+                user_id=user_id,
+                trainer_user_id=trainer_user_id,
+                is_active=True,
+            ).update(is_active=False)
+
+            room = ChatRoom.objects.filter(
+                user_id=user_id,
+                trainer_user_id=trainer_user_id,
+                is_active=False,
+            ).first()
+
+            if room:
+                room.is_active = True
+                room.save(update_fields=["is_active"])
+            else:
+                ChatRoom.objects.create(
+                    user_id=user_id,
+                    trainer_user_id=trainer_user_id,
+                    is_active=True,
+                )
+
+        elif action == "reject":
+            booking.status = TrainerBooking.STATUS_REJECTED
+            booking.save(update_fields=["status"])
+
+        # -------------------------
+        # 🔔 NOTIFY USER (AFTER COMMIT)
+        # -------------------------
+        def notify_user():
+            if action == "approve":
+                send_user_notification.delay(
+                    user_id=str(user_id),
+                    title="Trainer Approved 🎉",
+                    body="Your trainer has approved your booking. You can now chat or call.",
+                    data={
+                        "type": "BOOKING_APPROVED",
+                        "booking_id": str(booking_id),
+                    },
+                )
+
+            elif action == "reject":
+                send_user_notification.delay(
+                    user_id=str(user_id),
+                    title="Booking Rejected ❌",
+                    body="Your trainer has rejected the booking.",
+                    data={
+                        "type": "BOOKING_REJECTED",
+                        "booking_id": str(booking_id),
+                    },
+                )
+
+        transaction.on_commit(notify_user)

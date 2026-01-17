@@ -7,7 +7,9 @@ from django.shortcuts import get_object_or_404
 
 from chat.models import ChatRoom, Call
 from .call_events import emit_user_call_event, emit_call_event
-
+from user_app.tasks import emit_webhook
+from user_app.tasks import send_user_notification
+import uuid
 
 # ===========================
 # START CALL
@@ -15,16 +17,29 @@ from .call_events import emit_user_call_event, emit_call_event
 class StartCallView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @transaction.atomic
     def post(self, request, room_id):
-        user_id = request.user.id
+        # ✅ normalize user id (SAME AS CHAT)
+        try:
+            user_uuid = uuid.UUID(str(request.user.id))
+        except ValueError:
+            return Response(
+                {"detail": "Invalid user id in token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         room = get_object_or_404(ChatRoom, id=room_id, is_active=True)
 
-        target_user_id = room.other_participant_id(user_id)
+        # ✅ permission check (UUID vs UUID)
+        if user_uuid not in (room.user_id, room.trainer_user_id):
+            return Response(
+                {"detail": "Forbidden"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        target_user_id = room.other_participant_id(user_uuid)
 
         # 🚫 prevent self-call
-        if target_user_id == user_id:
+        if target_user_id == user_uuid:
             return Response(
                 {"detail": "Invalid call target"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -36,25 +51,57 @@ class StartCallView(APIView):
             status=Call.STATUS_RINGING,
         ).update(status=Call.STATUS_ENDED)
 
-        # create new call
+        # ✅ determine caller role (UUID-safe)
+        caller_role = (
+            Call.CALLER_USER
+            if user_uuid == room.user_id
+            else Call.CALLER_TRAINER
+        )
+
+        # ✅ create call (DB FIRST)
         call = Call.objects.create(
             room=room,
-            started_by=user_id,
+            started_by=user_uuid,
+            caller_role=caller_role,
             status=Call.STATUS_RINGING,
         )
 
-        print("START CALL:", call.id, "FROM:", user_id, "TO:", target_user_id)
+        def on_commit_actions():
+            # 🔔 WS notify callee
+            emit_user_call_event(
+                target_user_id,
+                {
+                    "type": "INCOMING_CALL",
+                    "call_id": str(call.id),
+                    "room_id": str(room.id),
+                    "from_user": str(call.started_by),
+                },
+            )
 
-        # 🔔 notify callee
-        emit_user_call_event(
-            target_user_id,
-            {
-                "type": "INCOMING_CALL",
-                "call_id": str(call.id),
-                "room_id": str(room.id),
-                "from_user": str(user_id),
-            },
-        )
+            # 🔔 PUSH → trainer ONLY when USER starts call
+            if call.caller_role == Call.CALLER_USER:
+                emit_webhook.delay(
+                    event="INCOMING_CALL",
+                    payload={
+                        "trainer_user_id": str(room.trainer_user_id),
+                        "call_id": str(call.id),
+                        "room_id": str(room.id),
+                    },
+                )
+            else:
+                # 🔔 Trainer → User (user push)
+                send_user_notification.delay(
+                    user_id=str(room.user_id),
+                    title="Incoming Call 📞",
+                    body="Your trainer is calling you",
+                    data={
+                        "type": "INCOMING_CALL",
+                        "call_id": str(call.id),
+                    },
+                )
+
+        # ✅ same commit pattern as chat
+        transaction.on_commit(on_commit_actions)
 
         return Response(
             {
@@ -63,7 +110,6 @@ class StartCallView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
-
 
 # ===========================
 # ACCEPT CALL
