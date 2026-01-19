@@ -8,6 +8,7 @@ __pycache__/
 # Virtual environments
 env/
 env1/
+env_ai
 venv/
 .venv/
 
