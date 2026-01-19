@@ -1,0 +1,13 @@
+ai_knowledge_service/
+├── data/
+│   └── intent_dataset.csv
+├── models/
+├── notebooks/
+│   └── dataset_exploration.ipynb
+├── src/
+│   ├── ml/
+│   ├── rag/
+│   ├── graph/
+│   └── api/
+├── requirements.txt
+└── README.md
