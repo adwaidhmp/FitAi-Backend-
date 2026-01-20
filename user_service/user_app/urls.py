@@ -39,6 +39,7 @@ from .trainer_userdata_view import TrainerUserOverviewView
 
 from .premium_buy_view import PremiumPlansView, AdminPremiumPlanView,CreatePremiumOrderView,VerifyPremiumPaymentView
 from .fmc_token_notif_view import SaveFCMTokenView
+from .rag_agent_view import AskAIAgentView
 
 urlpatterns = [
     path("profile/", UserProfileView.as_view(), name="user-profile"),
@@ -93,4 +94,7 @@ urlpatterns = [
 
     #fcm token for notifications
     path("fcm-token/", SaveFCMTokenView.as_view()),
+
+    # RAG agent endpoint will be here later
+    path("ai/ask/", AskAIAgentView.as_view()),
 ]
