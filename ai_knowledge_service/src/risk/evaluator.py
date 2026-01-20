@@ -6,17 +6,17 @@ def evaluate_risk(intent: str, question: str) -> str:
     - high
     """
 
-    # HIGH RISK: medical or health conditions
-    if intent == "medical":
+    # HIGH RISK: medical or explicitly unsafe behavior
+    if intent in ["medical", "unsafe"]:
         return "high"
 
-    # MEDIUM RISK: topics that are often misused
-    if intent in ["weight_loss", "protein_supplement"]:
+    # MEDIUM RISK: advice that can be misused if followed incorrectly
+    if intent in ["nutrition", "workout"]:
         return "medium"
 
-    # LOW RISK: general fitness & nutrition
-    if intent in ["nutrition", "workout", "general"]:
+    # LOW RISK: informational or casual
+    if intent in ["general", "chitchat"]:
         return "low"
 
-    # fallback
+    # Fallback (should never happen)
     return "low"

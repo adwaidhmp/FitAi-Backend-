@@ -1,6 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, APIRouter
 from pydantic import BaseModel
-
 from src.langgraph.graph import build_graph
 
 app = FastAPI(
@@ -8,13 +7,22 @@ app = FastAPI(
     version="1.0.0",
 )
 
-@app.get("/")
-def health_check():
-    return {"status": "ok"}
+# --------------------------------
+# ROUTER WITH BASE URL
+# --------------------------------
+
+router = APIRouter(
+    prefix="/api/v1/ai",   #base url
+    tags=["AI"],
+)
 
 # Build LangGraph ONCE at startup
 graph = build_graph()
 
+
+# --------------------------------
+# SCHEMAS
+# --------------------------------
 
 class AskRequest(BaseModel):
     question: str
@@ -24,7 +32,16 @@ class AskResponse(BaseModel):
     answer: str
 
 
-@app.post("/ask", response_model=AskResponse)
+# --------------------------------
+# ROUTES
+# --------------------------------
+
+@router.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
+@router.post("/ask", response_model=AskResponse)
 def ask(payload: AskRequest):
     question = payload.question.strip()
 
@@ -41,9 +58,17 @@ def ask(payload: AskRequest):
             }
         )
     except Exception as e:
+        # 🔥 TEMP DEBUG
+        print("🔥 AI ERROR:", repr(e))
         raise HTTPException(
             status_code=500,
-            detail="AI processing failed",
+            detail=str(e),
         )
 
     return AskResponse(answer=result["answer"])
+
+# --------------------------------
+# REGISTER ROUTER
+# --------------------------------
+
+app.include_router(router)
