@@ -183,25 +183,17 @@ services:
 # -------- AI Knowledge Service ----------
   ai-knowledge-service:
     build: ./ai_knowledge_service
-
     volumes:
       # Persist vector DB
       - ./ai_knowledge_service/data/vector_db:/app/data/vector_db
-
-      # 🔥 Mount BOTH intent + embedding models
+      # Mount local models (THIS IS IMPORTANT)
       - ./ai_knowledge_service/models:/app/models
-
     ports:
       - "8005:8000"
-
     env_file:
       - .env
-
     environment:
-      - TRANSFORMERS_OFFLINE=1
-      - HF_HUB_OFFLINE=1
       - TOKENIZERS_PARALLELISM=false
-
     command: >
       uvicorn src.api.app:app
       --host 0.0.0.0

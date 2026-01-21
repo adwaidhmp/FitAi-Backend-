@@ -13,13 +13,18 @@ CLASSIFIER_PATH = MODEL_DIR / "intent_classifier.joblib"
 LABEL_ENCODER_PATH = MODEL_DIR / "intent_label_encoder.joblib"
 
 # -------------------------------------------------
-# Load model artifacts (ONCE)
+# Load model artifacts (ONCE at startup)
 # -------------------------------------------------
 clf = joblib.load(CLASSIFIER_PATH)
 label_encoder = joblib.load(LABEL_ENCODER_PATH)
 
-# Sentence embedder (shared, CPU)
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+# -------------------------------------------------
+# Sentence embedder (STRICT LOCAL LOAD, NO HF EVER)
+# -------------------------------------------------
+embedder = SentenceTransformer(
+    "/app/models/all-MiniLM-L6-v2",
+    local_files_only=True
+)
 
 # -------------------------------------------------
 # Prediction function
@@ -33,7 +38,7 @@ def predict_intent(text: str):
     if not text or not text.strip():
         return "chitchat", 1.0
 
-    # Encode
+    # Encode text
     emb = embedder.encode([text], normalize_embeddings=True)
 
     # Decision scores (LinearSVC has no predict_proba)
@@ -45,7 +50,10 @@ def predict_intent(text: str):
 
     return intent, confidence
 
-#test
+
+# -------------------------------------------------
+# Local test (optional)
+# -------------------------------------------------
 if __name__ == "__main__":
     tests = [
         "Hi",
@@ -59,4 +67,4 @@ if __name__ == "__main__":
 
     for t in tests:
         intent, conf = predict_intent(t)
-        print(f"{t:45} → {intent:10} | confidence: {conf:.3f}")
+        print(f"{t:45} → {intent:12} | confidence: {conf:.3f}")
