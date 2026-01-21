@@ -37,7 +37,7 @@ def ingest_documents():
     chunks = splitter.split_documents(documents)
 
     embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
+        model_name="/app/models/all-MiniLM-L6-v2"
     )
 
     Chroma.from_documents(

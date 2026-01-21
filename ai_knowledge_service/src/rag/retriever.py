@@ -8,7 +8,7 @@ COLLECTION_NAME = "fitness_docs"
 
 # 🔥 CREATE ONCE (THIS IS THE SPEED FIX)
 _embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
+    model_name="/app/models/all-MiniLM-L6-v2"
 )
 
 _vectordb = Chroma(
