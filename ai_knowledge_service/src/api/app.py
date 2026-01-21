@@ -1,6 +1,9 @@
 from fastapi import FastAPI, HTTPException, APIRouter
 from pydantic import BaseModel
-from src.langgraph.graph import build_graph
+
+from src.langgraph.graph import build_graph #WITH ML MODEL TO PREDICT INTENT
+
+#from src.langgraph.graph_clone import build_graph #WTHOUT ML MODEL TO PREDICT INTENT 
 
 app = FastAPI(
     title="AI Fitness & Nutrition Knowledge Service",
