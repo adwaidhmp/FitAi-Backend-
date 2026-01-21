@@ -26,7 +26,7 @@ class AskAIAgentView(APIView):
             ai_response = requests.post(
                 f"{settings.AI_KNOWLEDGE_SERVICE_URL}/api/v1/ai/ask",
                 json=payload,
-                timeout=20,
+                timeout=60,
             )
         except requests.RequestException:
             return Response(
