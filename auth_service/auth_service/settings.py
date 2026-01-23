@@ -132,6 +132,7 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+#redis setup dev
 REDIS_URL = config("UPSTASH_REDIS_URL")
 
 CELERY_BROKER_URL = REDIS_URL
@@ -155,7 +156,6 @@ CACHES = {
 }
 
 DJANGO_REDIS_IGNORE_EXCEPTIONS = True
-
 
 # OTP policy
 OTP_TTL_SECONDS = 300
