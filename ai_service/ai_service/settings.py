@@ -46,7 +46,6 @@ INSTALLED_APPS = [
     "corsheaders",
     "diet_app",
     "workout_app",
-    "chatbot_app",
 ]
 
 MIDDLEWARE = [
@@ -150,3 +149,5 @@ USER_SERVICE_URL = os.getenv("USER_SERVICE_URL")
 TRAINER_SERVICE_URL = os.getenv("TRAINER_SERVICE_URL")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")

@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+      tier: web
+  template:
+    metadata:
+      labels:
+        app: user-service
+        tier: web
+    spec:
+      containers:
+        - name: web
+          image: user-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SERVICE_ROLE
+              value: "web"
+          envFrom:
+            - secretRef:
+                name: backend-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-consumer
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+      tier: consumer
+  template:
+    metadata:
+      labels:
+        app: user-service
+        tier: consumer
+    spec:
+      containers:
+        - name: consumer
+          image: user-service:latest
+          imagePullPolicy: Never
+          env:
+            - name: SERVICE_ROLE
+              value: "user_consumer"
+          envFrom:
+            - secretRef:
+                name: backend-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-worker
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+      tier: worker
+  template:
+    metadata:
+      labels:
+        app: user-service
+        tier: worker
+    spec:
+      containers:
+        - name: worker
+          image: user-service:latest
+          imagePullPolicy: Never
+          env:
+            - name: SERVICE_ROLE
+              value: "celery_worker"
+          envFrom:
+            - secretRef:
+                name: backend-env
+          command:
+            [
+              "celery",
+              "-A",
+              "user_service",
+              "worker",
+              "--loglevel=INFO",
+              "--pool=solo",
+            ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-beat
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+      tier: beat
+  template:
+    metadata:
+      labels:
+        app: user-service
+        tier: beat
+    spec:
+      containers:
+        - name: beat
+          image: user-service:latest
+          imagePullPolicy: Never
+          env:
+            - name: SERVICE_ROLE
+              value: "celery_beat"
+          envFrom:
+            - secretRef:
+                name: backend-env
+          command:
+            ["celery", "-A", "user_service.celery", "beat", "--loglevel=INFO"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: backend
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+  selector:
+    app: user-service
+    tier: web

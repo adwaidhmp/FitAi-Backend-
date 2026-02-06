@@ -1,17 +1,9 @@
 import json
 import logging
-
 from django.conf import settings
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
-
-
-def get_client():
-    if not settings.OPENAI_API_KEY:
-        raise RuntimeError("OPENAI_API_KEY is not set")
-    return OpenAI(api_key=settings.OPENAI_API_KEY)
-
 
 SYSTEM_PROMPT = """
 You are a nutrition estimation engine.
@@ -40,26 +32,45 @@ def estimate_nutrition(food_text: str) -> dict:
     logger.info("Estimating nutrition", extra={"food_text": food_text})
 
     try:
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        # ✅ Groq Key Check
+        if not settings.GROQ_API_KEY:
+            raise RuntimeError("GROQ_API_KEY is not set")
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": food_text},
-            ],
-            temperature=0,
+        # ✅ Groq Client (OpenAI-compatible)
+        client = OpenAI(
+            api_key=settings.GROQ_API_KEY,
+            base_url="https://api.groq.com/openai/v1",
         )
 
-        content = response.choices[0].message.content
-        data = json.loads(content)
+        # ✅ Prompt
+        prompt = f"""
+Food Input:
+{food_text}
 
-        logger.info("Nutrition estimation success")
+Return ONLY JSON.
+"""
+
+        # ✅ Call Groq Chat Model
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",  # fast + free tier
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            max_tokens=300,
+        )
+
+        content = response.choices[0].message.content.strip()
+
+        # ✅ Parse JSON strictly
+        data = json.loads(content)
 
         return data
 
     except Exception:
         logger.exception("Nutrition estimation FAILED")
+
         return {
             "items": [food_text],
             "total": {

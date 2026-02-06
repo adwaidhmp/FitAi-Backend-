@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-knowledge-service
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-knowledge-service
+  template:
+    metadata:
+      labels:
+        app: ai-knowledge-service
+    spec:
+      containers:
+        - name: web
+          image: ai-knowledge-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: backend-env
+          env:
+            - name: TOKENIZERS_PARALLELISM
+              value: "false"
+          command:
+            [
+              "uvicorn",
+              "src.api.app:app",
+              "--host",
+              "0.0.0.0",
+              "--port",
+              "8000",
+            ]
+          volumeMounts:
+            - name: vector-db
+              mountPath: /app/data/vector_db
+            - name: models
+              mountPath: /app/models
+      volumes:
+        - name: vector-db
+          hostPath:
+            path: /project/ai_knowledge_service/data/vector_db
+            type: Directory
+        - name: models
+          hostPath:
+            path: /project/ai_knowledge_service/models
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-knowledge-service
+  namespace: backend
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+  selector:
+    app: ai-knowledge-service

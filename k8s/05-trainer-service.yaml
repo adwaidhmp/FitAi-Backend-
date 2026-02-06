@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trainer-service
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trainer-service
+      tier: web
+  template:
+    metadata:
+      labels:
+        app: trainer-service
+        tier: web
+    spec:
+      containers:
+        - name: web
+          image: trainer-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SERVICE_ROLE
+              value: "web"
+          envFrom:
+            - secretRef:
+                name: backend-env
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trainer-worker
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trainer-service
+      tier: worker
+  template:
+    metadata:
+      labels:
+        app: trainer-service
+        tier: worker
+    spec:
+      containers:
+        - name: worker
+          image: trainer-service:latest
+          imagePullPolicy: Never
+          env:
+            - name: SERVICE_ROLE
+              value: "celery_worker"
+          envFrom:
+            - secretRef:
+                name: backend-env
+          command:
+            [
+              "celery",
+              "-A",
+              "trainer_service",
+              "worker",
+              "--loglevel=INFO",
+              "--pool=solo",
+            ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trainer-consumer
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trainer-service
+      tier: consumer
+  template:
+    metadata:
+      labels:
+        app: trainer-service
+        tier: consumer
+    spec:
+      containers:
+        - name: consumer
+          image: trainer-service:latest
+          imagePullPolicy: Never
+          env:
+            - name: SERVICE_ROLE
+              value: "trainer_consumer"
+          envFrom:
+            - secretRef:
+                name: backend-env
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trainer-service
+  namespace: backend
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+  selector:
+    app: trainer-service
+    tier: web

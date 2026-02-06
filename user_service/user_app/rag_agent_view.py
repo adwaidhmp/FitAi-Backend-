@@ -12,30 +12,32 @@ class AskAIAgentView(APIView):
         question = request.data.get("question", "").strip()
 
         if not question:
-            return Response(
-                {"detail": "Question is required"},
-                status=400,
-            )
+            return Response({"detail": "Question is required"}, status=400)
 
-        payload = {
-            "question": question,
-            # chat_history will be added later
-        }
+        payload = {"question": question}
+
+        url = f"{settings.AI_KNOWLEDGE_SERVICE_URL}/api/v1/ai/ask"
+        print("✅ Calling AI URL:", url)
 
         try:
             ai_response = requests.post(
-                f"{settings.AI_KNOWLEDGE_SERVICE_URL}/api/v1/ai/ask",
+                url,
                 json=payload,
-                timeout=60,
+                timeout=10,
             )
-        except requests.RequestException:
+        except requests.RequestException as e:
+            print("🔥 AI REQUEST FAILED:", repr(e))
             return Response(
-                {"detail": "AI service unavailable"},
+                {"detail": str(e)},
                 status=503,
             )
 
-        # Pass-through response
-        return Response(
-            ai_response.json(),
-            status=ai_response.status_code,
-        )
+        print("✅ AI responded:", ai_response.status_code)
+
+        # Safe JSON handling
+        try:
+            data = ai_response.json()
+        except Exception:
+            data = {"raw": ai_response.text}
+
+        return Response(data, status=ai_response.status_code)
