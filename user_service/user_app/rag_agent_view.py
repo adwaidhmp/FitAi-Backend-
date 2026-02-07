@@ -23,7 +23,7 @@ class AskAIAgentView(APIView):
             ai_response = requests.post(
                 url,
                 json=payload,
-                timeout=10,
+                timeout=60,
             )
         except requests.RequestException as e:
             print("🔥 AI REQUEST FAILED:", repr(e))
