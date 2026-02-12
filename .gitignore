@@ -12,6 +12,12 @@ env_ai
 venv/
 .venv/
 
+# Kubernetes secrets
+k8s/*secret*.yaml
+k8s/**/secret*.yaml
+k8s/00-secret.yaml
+k8s/secrets.yaml
+
 # Environment variables
 .env
 .env.*
